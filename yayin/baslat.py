@@ -15,8 +15,11 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 AYARLAR = BASE / "ayarlar.json"
 VARSAYILAN = {
+    "kaynak_klasorler": [],
     "kaynak_klasor": "",
     "hedef_klasor": "",
+    "duzen": "altklasor-kisi",
+    "derinlik": 0,
     "db": str(BASE / "faces.db"),
     "eps": 0.50,
     "min_samples": 3,
@@ -39,7 +42,13 @@ def ayar_oku():
             cfg.update(json.loads(AYARLAR.read_text(encoding="utf-8")))
         except Exception:
             pass
+    if not cfg.get("kaynak_klasorler") and cfg.get("kaynak_klasor"):
+        cfg["kaynak_klasorler"] = [cfg["kaynak_klasor"]]
     return cfg
+
+
+def kaynaklar(cfg):
+    return cfg.get("kaynak_klasorler") or ([cfg["kaynak_klasor"]] if cfg.get("kaynak_klasor") else [])
 
 
 def ayar_yaz(cfg):
@@ -163,11 +172,11 @@ def hedef_onayla(cfg):
 
 
 def tam_akis(cfg):
-    if not cfg["kaynak_klasor"]:
+    if not kaynaklar(cfg):
         print("Once fotograflarin bulundugu klasoru secin (1 numarali secenek).")
         return
     print("\n[1/5] Fotograflar taraniyor (en uzun adim, saatler surebilir)...")
-    if not calistir("scan", "--src", cfg["kaynak_klasor"], "--db", cfg["db"]):
+    if not calistir("scan", "--src", *kaynaklar(cfg), "--db", cfg["db"]):
         return
     print("\n[2/5] Kisiler gruplaniyor...")
     if not calistir("cluster", "--db", cfg["db"], "--eps", cfg["eps"],
@@ -182,7 +191,8 @@ def tam_akis(cfg):
         return
     print("\n[5/5] Kisi klasorleri olusturuluyor...")
     calistir("export", "--db", cfg["db"], "--dst", hedef,
-             "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"])
+             "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"],
+             "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"])
     print("\nBITTI! Klasorler: %s" % hedef)
     klasor_ac(hedef)
 
@@ -194,7 +204,10 @@ def menu():
         print("\n" + "=" * 62)
         print("   YUZ AYIRICI  (surum %s)" % surum())
         print("=" * 62)
-        print("   Fotograf klasoru : %s" % (cfg["kaynak_klasor"] or "- secilmedi -"))
+        _k = kaynaklar(cfg)
+        print("   Fotograf klasoru : %s" % (_k[0] if _k else "- secilmedi -"))
+        for _ek in _k[1:]:
+            print("                      %s" % _ek)
         print("   Cikti klasoru    : %s" % (cfg["hedef_klasor"] or "- secilmedi -"))
         print("   Durum            : %s" % durum(cfg))
         print("-" * 62)
@@ -214,9 +227,17 @@ def menu():
         s = input("\nSeciminiz: ").strip()
 
         if s == "1":
-            p = klasor_sec("Fotograflarin bulundugu klasoru secin", cfg["kaynak_klasor"])
+            mevcut = kaynaklar(cfg)
+            p = klasor_sec("Fotograf klasoru secin (alt klasorler de taranir)",
+                           mevcut[-1] if mevcut else "")
             if p:
-                cfg["kaynak_klasor"] = p
+                if mevcut:
+                    c = input("  [E] listeye ekle   [D] listeyi bununla degistir : ").strip().lower()
+                    liste = (mevcut + [p]) if c in ("", "e", "ekle") else [p]
+                else:
+                    liste = [p]
+                cfg["kaynak_klasorler"] = list(dict.fromkeys(liste))
+                cfg["kaynak_klasor"] = cfg["kaynak_klasorler"][0]
                 ayar_yaz(cfg)
         elif s == "2":
             p = klasor_sec("Kisi klasorleri nereye olusturulsun?", cfg["hedef_klasor"])
@@ -226,8 +247,8 @@ def menu():
         elif s == "3":
             tam_akis(cfg)
         elif s == "4":
-            if cfg["kaynak_klasor"]:
-                calistir("scan", "--src", cfg["kaynak_klasor"], "--db", cfg["db"])
+            if kaynaklar(cfg):
+                calistir("scan", "--src", *kaynaklar(cfg), "--db", cfg["db"])
             else:
                 print("Once 1 ile klasor secin.")
         elif s == "5":
@@ -252,10 +273,11 @@ def menu():
             hedef = hedef_onayla(cfg)
             if hedef:
                 calistir("export", "--db", cfg["db"], "--dst", hedef,
-                         "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"])
+                         "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"],
+                         "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"])
         elif s == "8":
-            if cfg["kaynak_klasor"]:
-                calistir("scan", "--src", cfg["kaynak_klasor"],
+            if kaynaklar(cfg):
+                calistir("scan", "--src", *kaynaklar(cfg),
                          "--db", str(BASE / "deneme.db"), "--limit", 300)
                 calistir("cluster", "--db", str(BASE / "deneme.db"), "--min-samples", 2)
                 calistir("review", "--db", str(BASE / "deneme.db"),

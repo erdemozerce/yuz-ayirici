@@ -1,21 +1,21 @@
 {
-  "surum": "1.6.0",
-  "notlar": "Gorsel arayuz: tarayicida acilan panel, canli ilerleme, yuz kucuk resimleri ve isim kutulari",
+  "surum": "1.7.0",
+  "notlar": "Birden fazla kaynak klasor secilebiliyor; cikti kaynaktaki alt klasor yapisini koruyor",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "25c43740acfcd09908a2bc71789e7ff407f8f7c70713bbfffbf862bd078364d8"
+      "sha256": "2fd69cbe541d5541b3bd68e5c5bd9b120a7206535e32f48d5dae591968d1f6d5"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "39ee8d7b5e01679b62fe77c0e3f8c8b734b997574098702c6c76478362ff16af"
+      "sha256": "ad0be25434a9bec1f9466864c15b0bfb6df61f90d6f02a715e6f29d8938bdf81"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "50f2da66058a27eb5eb7786b098a2eb7ae6f2786594e1010d79319dcb6e9d32b"
+      "sha256": "51f0738c304b504e74f32d9d6b17cfc9fa1b87bd2b179c0533f64681cead482c"
     },
     {
       "ad": "kutuphane.py",
@@ -25,7 +25,7 @@
     {
       "ad": "baslat.py",
       "url": "baslat.py",
-      "sha256": "44d8d704cf7659acea654c67fdad3bc8a05e7ed8657ed02ad0a4cf2649c68d67"
+      "sha256": "9a2e1528fbaf044afc3af8d54dd92d7d2d564856c1f0654ff9961e8578db08dc"
     },
     {
       "ad": "guncelle.py",

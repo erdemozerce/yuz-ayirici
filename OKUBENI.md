@@ -147,3 +147,28 @@ bir portta çalışır, tarayıcıda açılır. **Ek kütüphane yok.**
 
 Test edildi: tüm uçlar (`/`, `/api/durum`, `/api/kisiler`), 11 kişi × 5 küçük resim,
 yetkisiz erişim reddi, canlı ilerleme gösterimi.
+
+## Çoklu kaynak + alt klasör düzeni (v1.7.0)
+
+`scan --src` artık `nargs="+"` — birden fazla ana klasör alır, her biri alt klasörleriyle
+taranır. `files` tablosuna **`kok`** sütunu eklendi (dosyanın hangi kaynak klasörden geldiği);
+eski veritabanları `db_connect` içinde `ALTER TABLE` ile otomatik yükseltilir.
+İç içe seçilen klasörlerde aynı dosya iki kez taranmaz.
+
+`export --duzen` üç seçenek sunar:
+
+| değer | sonuç |
+|---|---|
+| `altklasor-kisi` *(varsayılan)* | `<çıktı>/<kaynaktaki bağıl yol>/<kişi>/foto.jpg` |
+| `kisi-altklasor` | `<çıktı>/<kişi>/<kaynaktaki bağıl yol>/foto.jpg` |
+| `duz` | `<çıktı>/<kişi>/foto.jpg` |
+
+`--derinlik N` bağıl yolu ilk N seviyeye kırpar (0 = tamamı). Birden fazla kaynak kökü
+varsa her kökün klasör adı bağıl yolun başına eklenir — farklı disklerden gelen aynı
+isimli `Bolum1` klasörleri çakışmaz.
+
+**Kümeleme her zaman küresel kalır** — klasör bölünmesi yalnızca çıktı düzenini etkiler,
+kişi kimliğini değil. Aynı kişi tüm bölümlerde aynı küme numarasını alır.
+
+Test edildi: 2 ayrı ana klasör, 3 farklı derinlikte alt klasör, 9 fotoğraf → 2 kişi
+(küresel), üç düzenin üçü de doğru ağaç üretti; arayüzden uçtan uca çalıştırıldı.

@@ -120,15 +120,28 @@
 
   <div class="kart">
     <h2>1 · Klasörler</h2>
+    <div id="kaynak-liste"></div>
     <div class="satir">
       <div class="etiket">Fotoğraflar</div>
-      <div class="deger bos" id="y-kaynak">seçilmedi</div>
-      <button onclick="klasorSec('kaynak')">Seç</button>
+      <div class="deger bos" style="font-family:inherit;font-size:13px">
+        Birden fazla klasör ekleyebilirsin — alt klasörler de taranır
+      </div>
+      <button onclick="klasorSec('kaynak')">+ Klasör ekle</button>
     </div>
     <div class="satir">
       <div class="etiket">Çıktı</div>
       <div class="deger bos" id="y-hedef">seçilmedi</div>
       <button onclick="klasorSec('hedef')">Seç</button>
+    </div>
+    <div class="satir">
+      <div class="etiket">Çıktı düzeni</div>
+      <div class="deger" style="font-family:inherit;font-size:13.5px">
+        <select id="duzen" onchange="duzenDegistir()">
+          <option value="altklasor-kisi">Alt klasör → kişi &nbsp;(Bolum1 / Ahmet / foto.jpg)</option>
+          <option value="kisi-altklasor">Kişi → alt klasör &nbsp;(Ahmet / Bolum1 / foto.jpg)</option>
+          <option value="duz">Düz &nbsp;(Ahmet / foto.jpg)</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -183,6 +196,9 @@
       <button onclick="post('/api/klasor-ac')">Çıktı klasörünü aç</button>
     </div>
     <div class="ipucu">
+      <b>Alt klasör → kişi</b> düzeninde her bölüm/çekim klasörü kendi içinde kişilere ayrılır;
+      kaynaktaki klasör yapısı çıktıda birebir korunur. Birden fazla ana klasör seçtiysen
+      her birinin adı çıktıda ayrı üst klasör olur.<br><br>
       exFAT disklerde fotoğraflar gerçek kopya olarak yazılır (yer kaplar), NTFS'te ise
       bağlantı kurulur (yer kaplamaz). Program hangi diskte olduğunu kendisi anlar.
       <b>Önce hesapla</b> ile ne kadar yer gerektiğini yazmadan görebilirsin.
@@ -222,9 +238,12 @@ async function baslat(adim, ek){
 }
 async function durdur(){ await post("/api/durdur"); }
 
+async function kaynakSil(sira){ await post("/api/klasor", {tip:"kaynak_sil", sira}); durumGuncelle(); }
+async function duzenDegistir(){ await post("/api/ayar", {duzen: $("#duzen").value}); }
+
 async function hepsiniYap(){
   const d = await al("/api/durum");
-  if(!d.ayar.kaynak_klasor) return uyar("Önce fotoğraf klasörünü seçin.");
+  if(!(d.ayar.kaynak_klasorler||[]).length) return uyar("Önce en az bir fotoğraf klasörü ekleyin.");
   sirayla = ["tara","grupla","tani"];
   baslat(sirayla.shift());
 }
@@ -248,9 +267,14 @@ async function durumGuncelle(){
   $("#s-isim").textContent = o.isimli;
   $("#s-kut").textContent  = o.kutuphane;
 
-  const k = d.ayar.kaynak_klasor, h = d.ayar.hedef_klasor;
-  $("#y-kaynak").textContent = k || "seçilmedi";
-  $("#y-kaynak").className = "deger" + (k ? "" : " bos");
+  const h = d.ayar.hedef_klasor;
+  $("#kaynak-liste").innerHTML = (d.ayar.kaynak_klasorler||[]).map((y,i)=>`
+    <div class="satir">
+      <div class="etiket">${i===0 ? "Fotoğraflar" : ""}</div>
+      <div class="deger" title="${y.replace(/"/g,"&quot;")}">${y}</div>
+      <button class="tehlike" onclick="kaynakSil(${i})">Çıkar</button>
+    </div>`).join("");
+  $("#duzen").value = d.ayar.duzen || "altklasor-kisi";
   $("#y-hedef").textContent = h || "seçilmedi";
   $("#y-hedef").className = "deger" + (h ? "" : " bos");
 

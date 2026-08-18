@@ -57,8 +57,10 @@ surec = {"p": None}
 
 def ayar_oku():
     varsayilan = {
-        "kaynak_klasor": "", "hedef_klasor": "", "db": str(BASE / "faces.db"),
+        "kaynak_klasorler": [], "kaynak_klasor": "", "hedef_klasor": "",
+        "db": str(BASE / "faces.db"),
         "eps": 0.50, "min_samples": 3, "mod": "auto",
+        "duzen": "altklasor-kisi", "derinlik": 0,
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -66,6 +68,9 @@ def ayar_oku():
             varsayilan.update(json.loads(AYARLAR.read_text(encoding="utf-8")))
         except Exception:
             pass
+    # eski tek klasorlu ayari listeye tasi
+    if not varsayilan["kaynak_klasorler"] and varsayilan.get("kaynak_klasor"):
+        varsayilan["kaynak_klasorler"] = [varsayilan["kaynak_klasor"]]
     return varsayilan
 
 
@@ -309,20 +314,39 @@ class Vekil(BaseHTTPRequestHandler):
 
         if u.path == "/api/klasor":
             tip = veri.get("tip", "kaynak")
+            if tip == "kaynak_sil":
+                i = int(veri.get("sira", -1))
+                liste = cfg.get("kaynak_klasorler", [])
+                if 0 <= i < len(liste):
+                    liste.pop(i)
+                    cfg["kaynak_klasorler"] = liste
+                    cfg["kaynak_klasor"] = liste[0] if liste else ""
+                    ayar_yaz(cfg)
+                return self._json({"ok": True})
+
+            hedef_mi = (tip == "hedef")
+            baslangic = (cfg.get("hedef_klasor") if hedef_mi
+                         else (cfg.get("kaynak_klasorler") or [""])[-1])
             cevap = queue.Queue()
             dialog_kuyrugu.put((
-                "Fotograflarin bulundugu klasoru secin" if tip == "kaynak"
-                else "Kisi klasorleri nereye olusturulsun?",
-                cfg.get("kaynak_klasor" if tip == "kaynak" else "hedef_klasor", ""),
-                cevap))
+                "Kisi klasorleri nereye olusturulsun?" if hedef_mi
+                else "Fotograf klasoru secin (alt klasorler de taranir)",
+                baslangic or "", cevap))
             yol = cevap.get()
             if yol:
-                cfg["kaynak_klasor" if tip == "kaynak" else "hedef_klasor"] = yol
+                if hedef_mi:
+                    cfg["hedef_klasor"] = yol
+                else:
+                    liste = cfg.get("kaynak_klasorler", [])
+                    if yol not in liste:
+                        liste.append(yol)
+                    cfg["kaynak_klasorler"] = liste
+                    cfg["kaynak_klasor"] = liste[0]
                 ayar_yaz(cfg)
             return self._json({"yol": yol})
 
         if u.path == "/api/ayar":
-            for k in ("eps", "min_samples", "mod"):
+            for k in ("eps", "min_samples", "mod", "duzen", "derinlik"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -340,9 +364,10 @@ class Vekil(BaseHTTPRequestHandler):
             db = cfg["db"]
             isimler = str(BASE / "isimler.csv")
             if adim == "tara":
-                if not cfg.get("kaynak_klasor"):
-                    return self._json({"hata": "Once fotograf klasorunu secin"}, 400)
-                a = ["scan", "--src", cfg["kaynak_klasor"], "--db", db]
+                kaynaklar = cfg.get("kaynak_klasorler") or []
+                if not kaynaklar:
+                    return self._json({"hata": "Once en az bir fotograf klasoru ekleyin"}, 400)
+                a = ["scan", "--src"] + kaynaklar + ["--db", db]
                 if veri.get("deneme"):
                     a += ["--limit", "300"]
                 return self._json({"ok": is_calistir("Fotograflar taraniyor", a)})
@@ -361,13 +386,15 @@ class Vekil(BaseHTTPRequestHandler):
                     return self._json({"hata": "Once cikti klasorunu secin"}, 400)
                 return self._json({"ok": is_calistir("Klasorler olusturuluyor", [
                     "export", "--db", db, "--dst", cfg["hedef_klasor"],
-                    "--names", isimler, "--mode", cfg["mod"], "--evet"])})
+                    "--names", isimler, "--mode", cfg["mod"],
+                    "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"], "--evet"])})
             if adim == "onizleme":
                 if not cfg.get("hedef_klasor"):
                     return self._json({"hata": "Once cikti klasorunu secin"}, 400)
                 return self._json({"ok": is_calistir("Onizleme", [
                     "export", "--db", db, "--dst", cfg["hedef_klasor"],
-                    "--names", isimler, "--mode", cfg["mod"], "--dry-run"])})
+                    "--names", isimler, "--mode", cfg["mod"],
+                    "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"], "--dry-run"])})
             return self._json({"hata": "bilinmeyen adim"}, 400)
 
         if u.path == "/api/klasor-ac":

@@ -32,10 +32,32 @@ Panelde dört bölüm var:
 
 | Bölüm | Ne yaparsın |
 |---|---|
-| **1 · Klasörler** | Fotoğrafların yerini ve klasörlerin oluşacağı yeri seçersin |
+| **1 · Klasörler** | Fotoğrafların yerini (birden fazla olabilir) ve çıktı yerini seçersin |
 | **2 · Tarama** | *Deneme* ile 300 fotoğrafa bakarsın, sonra *Hepsini Yap* dersin |
 | **3 · Kişiler** | Her kişinin yüzlerini görür, kutuya ismini yazarsın |
 | **4 · Klasörleme** | *Önce hesapla* ile yer ihtiyacını görür, sonra klasörleri oluşturursun |
+
+### Birden fazla klasör
+
+**+ Klasör ekle** ile istediğin kadar ana klasör ekleyebilirsin. Her klasörün
+**alt klasörleri de** taranır — ayrıca tek tek eklemene gerek yok.
+
+Gruplama her zaman **hepsinin üzerinden ortak** yapılır: aynı kişi farklı
+bölümlerde de aynı kişi olarak tanınır.
+
+### Çıktı düzeni
+
+**Çıktı düzeni** kutusundan seçersin:
+
+| Seçenek | Sonuç |
+|---|---|
+| **Alt klasör → kişi** *(varsayılan)* | `Çıktı\9 Şubat\Bolum2\kamera-A\Ahmet\foto.jpg` |
+| **Kişi → alt klasör** | `Çıktı\Ahmet\9 Şubat\Bolum2\kamera-A\foto.jpg` |
+| **Düz** | `Çıktı\Ahmet\foto.jpg` |
+
+Varsayılan seçenekte kaynaktaki klasör yapın **birebir korunur**, her çekim
+klasörü kendi içinde kişilere ayrılır. Birden fazla ana klasör seçtiysen her
+birinin adı çıktıda ayrı bir üst klasör olur, karışmaz.
 
 Tarama sürerken ilerleme çubuğu, hız ve kalan süre canlı görünür. Bilgisayarı
 kullanmaya devam edebilirsin.

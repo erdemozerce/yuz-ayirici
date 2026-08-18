@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 import argparse
 import base64
@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS files(
     mtime   REAL,
     size    INTEGER,
     n_faces INTEGER,
-    status  TEXT
+    status  TEXT,
+    kok     TEXT
 );
 CREATE TABLE IF NOT EXISTS faces(
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,6 +82,11 @@ CREATE TABLE IF NOT EXISTS oneriler(
 def db_connect(path):
     con = sqlite3.connect(path)
     con.executescript(DB_SCHEMA)
+    # eski veritabanlarina 'kok' sutununu ekle (hangi kaynak klasorden geldigi)
+    sutunlar = {r[1] for r in con.execute("PRAGMA table_info(files)")}
+    if "kok" not in sutunlar:
+        con.execute("ALTER TABLE files ADD COLUMN kok TEXT")
+        con.commit()
     return con
 
 
@@ -108,16 +114,37 @@ def imread_unicode(path):
         return None
 
 
-def list_images(src):
-    src = Path(src)
-    out = []
-    for root, dirs, names in os.walk(src):
-        dirs[:] = [d for d in dirs if not d.startswith((".", "$"))]
-        for n in names:
-            if Path(n).suffix.lower() in IMAGE_EXT:
-                out.append(str(Path(root) / n))
+def list_images(kaynaklar):
+    """
+    Bir ya da birden fazla klasoru (alt klasorleriyle birlikte) tarar.
+    Dondurur: [(dosya_yolu, ait_oldugu_kaynak_klasor), ...]
+    """
+    if isinstance(kaynaklar, (str, Path)):
+        kaynaklar = [kaynaklar]
+    out, gorulen = [], set()
+    for kaynak in kaynaklar:
+        kok = str(Path(kaynak).resolve())
+        for root, dirs, names in os.walk(kok):
+            dirs[:] = [d for d in dirs if not d.startswith((".", "$"))]
+            for n in names:
+                if Path(n).suffix.lower() in IMAGE_EXT:
+                    p = str(Path(root) / n)
+                    if p not in gorulen:      # ic ice secilen klasorlerde tekrari onle
+                        gorulen.add(p)
+                        out.append((p, kok))
     out.sort()
     return out
+
+
+def bagil_klasor(yol, kok, derinlik=0):
+    """Fotografin kaynak klasorune gore bagil alt klasor yolu."""
+    try:
+        bagil = Path(yol).parent.resolve().relative_to(Path(kok).resolve())
+    except (ValueError, OSError):
+        return Path(".")
+    if derinlik and len(bagil.parts) > derinlik:
+        bagil = Path(*bagil.parts[:derinlik])
+    return bagil
 
 
 def fmt_eta(seconds):
@@ -153,22 +180,26 @@ def cmd_scan(args):
     from insightface.app import FaceAnalysis
 
     con = db_connect(args.db)
+    kaynaklar = args.src if isinstance(args.src, list) else [args.src]
     print("Dosyalar listeleniyor...")
-    files = list_images(args.src)
+    for k in kaynaklar:
+        print("  kaynak: %s" % k)
+    files = list_images(kaynaklar)
     if args.limit:
         files = files[: args.limit]
-    print(f"  {len(files)} gorsel bulundu.")
+    print(f"  {len(files)} gorsel bulundu"
+          f"{' (%d klasorden)' % len(kaynaklar) if len(kaynaklar) > 1 else ''}.")
 
     done = {r[0]: (r[1], r[2]) for r in con.execute("SELECT path, mtime, size FROM files")}
     todo = []
-    for f in files:
+    for f, kok in files:
         try:
             st = os.stat(f)
         except OSError:
             continue
         prev = done.get(f)
         if prev is None or abs(prev[0] - st.st_mtime) > 1 or prev[1] != st.st_size:
-            todo.append((f, st.st_mtime, st.st_size))
+            todo.append((f, st.st_mtime, st.st_size, kok))
     print(f"  {len(todo)} dosya islenecek ({len(files) - len(todo)} tanesi zaten islenmis).")
     if not todo:
         return
@@ -182,7 +213,7 @@ def cmd_scan(args):
 
     t0 = time.time()
     n_faces_total = 0
-    for i, (path, mtime, size) in enumerate(todo, 1):
+    for i, (path, mtime, size, kok) in enumerate(todo, 1):
         status, faces = "ok", []
         img = imread_unicode(path)
         if img is None:
@@ -212,8 +243,8 @@ def cmd_scan(args):
                 "INSERT INTO faces(path,x1,y1,x2,y2,det_score,det_w,emb) VALUES(?,?,?,?,?,?,?,?)", rows
             )
         con.execute(
-            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status) VALUES(?,?,?,?,?)",
-            (path, mtime, size, len(rows), status),
+            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok) VALUES(?,?,?,?,?,?)",
+            (path, mtime, size, len(rows), status, kok),
         )
         n_faces_total += len(rows)
 
@@ -681,6 +712,34 @@ def cmd_export(args):
         if nof:
             groups["_yuz_yok"] = nof
 
+    # --------------------------------------------- hangi dosya hangi kaynaktan
+    koklar = {r[0]: (r[1] or "") for r in con.execute("SELECT path, kok FROM files")}
+    bilinen_kokler = sorted({k for k in koklar.values() if k}, key=len, reverse=True)
+    coklu_kaynak = len(bilinen_kokler) > 1
+
+    def kok_bul(p):
+        k = koklar.get(p, "")
+        if k:
+            return k
+        for aday in bilinen_kokler:      # eski kayitlarda kok bos olabilir
+            if p.startswith(aday):
+                return aday
+        return ""
+
+    def hedef_dizin(p, kisi_klasor):
+        if args.duzen == "duz":
+            return dst / kisi_klasor
+        kok = kok_bul(p)
+        if not kok:
+            return dst / kisi_klasor
+        bagil = bagil_klasor(p, kok, args.derinlik)
+        if coklu_kaynak:
+            bagil = Path(Path(kok).name) / bagil
+        parcalar = [x for x in bagil.parts if x not in (".", "")]
+        if args.duzen == "kisi-altklasor":
+            return dst.joinpath(kisi_klasor, *parcalar)
+        return dst.joinpath(*parcalar, kisi_klasor)   # altklasor-kisi (varsayilan)
+
     # ------------------------------------------------------------ plan
     plan = []
     for cid, paths in sorted(groups.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
@@ -698,18 +757,22 @@ def cmd_export(args):
         print("Yazilacak bir sey yok. Once 'cluster' calistirin.")
         return
 
-    toplam_dosya = sum(len(p) for _, p in plan)
-    toplam_bayt = 0
-    for _, paths in plan:
-        for p in paths:
-            try:
-                toplam_bayt += os.path.getsize(p)
-            except OSError:
-                pass
-
     dst = Path(args.dst)
     zaten_vardi = dst.exists()
     dst.mkdir(parents=True, exist_ok=True)
+
+    yazma_listesi = []          # (hedef_dizin, kaynak_dosya)
+    for folder, paths in plan:
+        for p in paths:
+            yazma_listesi.append((hedef_dizin(p, folder), p))
+    toplam_dosya = len(yazma_listesi)
+    toplam_bayt = 0
+    for _, p in yazma_listesi:
+        try:
+            toplam_bayt += os.path.getsize(p)
+        except OSError:
+            pass
+    hedef_klasorler = {d for d, _ in yazma_listesi}
 
     # --------------------------------------------- yontem ve yer kontrolu
     fs = dosya_sistemi(dst)
@@ -736,17 +799,28 @@ def cmd_export(args):
     print("=" * 64)
     print("  YAZMA ONCESI OZET  -  henuz hicbir sey yazilmadi")
     print("=" * 64)
+    duzen_adi = {"altklasor-kisi": "alt klasor > kisi",
+                 "kisi-altklasor": "kisi > alt klasor",
+                 "duz": "tek seviye (alt klasor yok)"}[args.duzen]
     print(f"  Hedef klasor    : {dst}")
-    print(f"  Olusacak klasor : {len(plan)} kisi")
+    print(f"  Duzen           : {duzen_adi}")
+    print(f"  Kisi sayisi     : {len(plan)}")
+    print(f"  Olusacak klasor : {len(hedef_klasorler)} adet")
     print(f"  Yazilacak dosya : {toplam_dosya} adet")
     print(f"  Yontem          : {'GERCEK KOPYA' if mod == 'copy' else 'sabit bag (yer kaplamaz)'}")
     print(f"  Gereken alan    : {gereken / GB:.1f} GB")
     print(f"  Diskte bos alan : {bos / GB:.1f} GB")
     print("-" * 64)
-    for folder, paths in plan[:8]:
+    for folder, paths in plan[:6]:
         print(f"    {folder:<30} {len(paths):>5} fotograf")
-    if len(plan) > 8:
-        print(f"    ... ve {len(plan) - 8} klasor daha")
+    if len(plan) > 6:
+        print(f"    ... ve {len(plan) - 6} kisi daha")
+    if yazma_listesi:
+        ornek = sorted(hedef_klasorler)[0]
+        try:
+            print("  Ornek yol: ...\\%s" % ornek.relative_to(dst.parent))
+        except ValueError:
+            print("  Ornek yol: %s" % ornek)
     print("=" * 64)
 
     if gereken > bos * 0.97:
@@ -776,10 +850,13 @@ def cmd_export(args):
     # ------------------------------------------------------------ yazma
     print()
     toplam = 0
-    for folder, paths in plan:
-        out = dst / folder
-        out.mkdir(exist_ok=True)
-        for p in paths:
+    olusan = set()
+    sayaclar = {}
+    for out, p in yazma_listesi:
+        if out not in olusan:
+            out.mkdir(parents=True, exist_ok=True)
+            olusan.add(out)
+        if True:
             src = Path(p)
             target = out / src.name
             k = 1
@@ -797,12 +874,21 @@ def cmd_export(args):
                 else:
                     shutil.copy2(src, target)
                 toplam += 1
+                sayaclar[out] = sayaclar.get(out, 0) + 1
             except Exception as e:
                 print(f"  ! {src.name}: {e}")
-        print(f"  {folder}: {len(paths)} fotograf")
+            if toplam % 200 == 0 and toplam:
+                print("  ... %d/%d dosya" % (toplam, toplam_dosya), flush=True)
+
+    for d in sorted(sayaclar):
+        try:
+            gosterim = d.relative_to(dst)
+        except ValueError:
+            gosterim = d
+        print(f"  {gosterim}: {sayaclar[d]} fotograf")
 
     print()
-    print(f"Tamam. {len(plan)} klasor, {toplam} dosya -> {dst}")
+    print(f"Tamam. {len(olusan)} klasor, {toplam} dosya -> {dst}")
     if mod == "hardlink":
         print("Not: sabit bag modunda fotograflar ekstra yer kaplamaz; bir klasordeki")
         print("dosyayi silmek orijinali silmez.")
@@ -823,7 +909,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("scan", help="fotograflari tara, yuzleri cikar")
-    s.add_argument("--src", required=True, help="fotograflarin bulundugu klasor / surucu")
+    s.add_argument("--src", required=True, nargs="+",
+                   help="bir ya da birden fazla klasor (alt klasorler dahil taranir)")
     s.add_argument("--db", default="faces.db")
     s.add_argument("--model", default="buffalo_l", help="buffalo_l (iyi) / buffalo_s (hizli)")
     s.add_argument("--gpu", action="store_true", help="NVIDIA GPU varsa (onnxruntime-gpu gerekir)")
@@ -881,6 +968,11 @@ def main():
     e.add_argument("--db", default="faces.db")
     e.add_argument("--dst", required=True)
     e.add_argument("--names", default="isimler.csv")
+    e.add_argument("--duzen", choices=["altklasor-kisi", "kisi-altklasor", "duz"],
+                   default="altklasor-kisi",
+                   help="cikti duzeni: alt klasor > kisi (varsayilan), kisi > alt klasor, ya da duz")
+    e.add_argument("--derinlik", type=int, default=0,
+                   help="kac seviye alt klasor korunsun (0 = hepsi)")
     e.add_argument("--mode", choices=["auto", "hardlink", "copy"], default="auto",
                    help="auto: disk destekliyorsa sabit bag, yoksa kopya (onerilen)")
     e.add_argument("--min-photos", type=int, default=2)
