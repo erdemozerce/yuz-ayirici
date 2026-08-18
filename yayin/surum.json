@@ -1,0 +1,31 @@
+{
+  "surum": "1.0.1",
+  "notlar": "Deneme surumu: guncelleme mekanizmasi testi",
+  "dosyalar": [
+    {
+      "ad": "face_sorter.py",
+      "url": "face_sorter.py",
+      "sha256": "56dbb5afe8ea397ac1110969a688202adca0385b928eb911604e628bf918b7d3"
+    },
+    {
+      "ad": "baslat.py",
+      "url": "baslat.py",
+      "sha256": "ecefd399610bc9fc48424249f0469780562c00825845c4867276fd9ae62bb086"
+    },
+    {
+      "ad": "guncelle.py",
+      "url": "guncelle.py",
+      "sha256": "91ac69ce80ce99a4d805c6100f337907dfadfcef0cdd97b59b24d97b15844ca5"
+    },
+    {
+      "ad": "kurulum_testi.py",
+      "url": "kurulum_testi.py",
+      "sha256": "0342b59a12fd05078f6974405701d53b2688d16e35b25179ab61ac2d1dce2aac"
+    },
+    {
+      "ad": "gereksinimler.txt",
+      "url": "gereksinimler.txt",
+      "sha256": "d309498a2b2458a7cfd38617de696a691aed2ed1e66d69eaa412bb4271dd7c58"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# yerel calisma dosyalari - yayinlanmaz
+*.db
+ayarlar.json
+python_yolu.txt
+gpu_var.txt
+surum_yerel.txt
+inceleme.html
+deneme.html
+isimler.csv
+yedek/
+__pycache__/
+.guncelleme_gecici/
+*.zip
