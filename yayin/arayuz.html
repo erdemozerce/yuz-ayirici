@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yüz Ayırıcı</title>
+<style>
+  :root{
+    --bg:#0f1115; --kart:#171a21; --kart2:#1e222b; --cizgi:#2a2f3a;
+    --yazi:#e8eaef; --soluk:#9aa3b2; --vurgu:#4f8cff; --vurgu2:#3a6fd8;
+    --yesil:#3ecf8e; --sari:#f0b429; --kirmizi:#f2555a;
+    --r:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6fa; --kart:#ffffff; --kart2:#eef1f6; --cizgi:#dde2ea;
+           --yazi:#161a20; --soluk:#5d6675; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--yazi);
+    font:15px/1.55 -apple-system,"Segoe UI",Roboto,system-ui,sans-serif;}
+  .sar{max-width:1080px;margin:0 auto;padding:28px 22px 70px}
+
+  header{display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap}
+  .amblem{width:42px;height:42px;border-radius:12px;flex:none;
+    background:linear-gradient(135deg,var(--vurgu),#8b5cf6);
+    display:grid;place-items:center;font-size:21px}
+  h1{font-size:21px;margin:0;font-weight:650;letter-spacing:-.2px}
+  .altbaslik{color:var(--soluk);font-size:13px;margin-top:2px}
+  .rozet{margin-left:auto;background:var(--kart);border:1px solid var(--cizgi);
+    padding:7px 13px;border-radius:999px;font-size:12.5px;color:var(--soluk)}
+
+  .kartlar{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:24px}
+  .sayac{background:var(--kart);border:1px solid var(--cizgi);border-radius:var(--r);padding:15px 17px}
+  .sayac b{display:block;font-size:25px;font-weight:640;letter-spacing:-.5px}
+  .sayac span{color:var(--soluk);font-size:12.5px}
+
+  .kart{background:var(--kart);border:1px solid var(--cizgi);border-radius:var(--r);
+    padding:20px 22px;margin-bottom:18px}
+  .kart h2{font-size:12px;text-transform:uppercase;letter-spacing:.9px;color:var(--soluk);
+    margin:0 0 15px;font-weight:600}
+
+  .satir{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--cizgi)}
+  .satir:last-child{border-bottom:0}
+  .satir .etiket{width:118px;color:var(--soluk);font-size:13.5px;flex:none}
+  .satir .deger{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .satir .deger.bos{color:var(--soluk);font-style:italic;font-family:inherit;font-size:13.5px}
+
+  button{font:inherit;border:0;border-radius:10px;padding:10px 17px;cursor:pointer;
+    background:var(--kart2);color:var(--yazi);border:1px solid var(--cizgi);
+    transition:.13s;font-size:13.5px;font-weight:500}
+  button:hover:not(:disabled){border-color:var(--vurgu);color:var(--vurgu)}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  button.ana{background:var(--vurgu);border-color:var(--vurgu);color:#fff;font-weight:600}
+  button.ana:hover:not(:disabled){background:var(--vurgu2);border-color:var(--vurgu2);color:#fff}
+  button.buyuk{padding:14px 26px;font-size:15px;border-radius:12px}
+  button.tehlike:hover:not(:disabled){border-color:var(--kirmizi);color:var(--kirmizi)}
+  .dugmeler{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+
+  .cubuk{height:9px;background:var(--kart2);border-radius:99px;overflow:hidden;margin:14px 0 10px}
+  .cubuk i{display:block;height:100%;background:linear-gradient(90deg,var(--vurgu),#8b5cf6);
+    width:0;transition:width .4s}
+  .ilerleme-bilgi{display:flex;justify-content:space-between;font-size:13px;color:var(--soluk);
+    flex-wrap:wrap;gap:8px}
+  pre.gunluk{background:var(--bg);border:1px solid var(--cizgi);border-radius:10px;
+    padding:12px 14px;font-size:11.5px;line-height:1.6;max-height:190px;overflow:auto;margin:14px 0 0;
+    color:var(--soluk);white-space:pre-wrap;word-break:break-word}
+
+  .kisiler{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+  .kisi{background:var(--kart2);border:1px solid var(--cizgi);border-radius:12px;padding:13px;
+    transition:.13s}
+  .kisi:hover{border-color:var(--vurgu)}
+  .kisi .yuzler{display:flex;gap:5px;margin-bottom:11px;overflow:hidden}
+  .kisi img{width:100%;max-width:62px;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
+  .kisi .ust{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .kisi .no{font-size:11.5px;color:var(--soluk);font-family:ui-monospace,Consolas,monospace}
+  .kisi .adet{margin-left:auto;font-size:11.5px;color:var(--soluk)}
+  .kisi input{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--cizgi);
+    background:var(--kart);color:var(--yazi);font:inherit;font-size:13.5px}
+  .kisi input:focus{outline:0;border-color:var(--vurgu)}
+  .oneri{font-size:12px;margin-top:8px;color:var(--soluk);display:flex;align-items:center;gap:7px;
+    flex-wrap:wrap}
+  .etiketcik{background:rgba(62,207,142,.14);color:var(--yesil);padding:2.5px 8px;border-radius:999px;
+    font-size:11px;font-weight:600}
+  .etiketcik.yeni{background:rgba(240,180,41,.14);color:var(--sari)}
+  .oneri button{padding:3px 9px;font-size:11.5px;border-radius:7px}
+  .kaydedildi{color:var(--yesil);font-size:11.5px}
+
+  .bos-durum{text-align:center;padding:44px 20px;color:var(--soluk)}
+  .bos-durum .ikon{font-size:38px;margin-bottom:12px;opacity:.55}
+  .ipucu{font-size:12.5px;color:var(--soluk);margin-top:12px;line-height:1.6}
+  .gizli{display:none !important}
+  .uyari{background:rgba(242,85,90,.1);border:1px solid rgba(242,85,90,.35);color:var(--kirmizi);
+    padding:11px 14px;border-radius:10px;font-size:13.5px;margin-bottom:14px}
+  select{font:inherit;padding:8px 11px;border-radius:9px;border:1px solid var(--cizgi);
+    background:var(--kart2);color:var(--yazi);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="sar">
+
+  <header>
+    <div class="amblem">🎞️</div>
+    <div>
+      <h1>Yüz Ayırıcı</h1>
+      <div class="altbaslik">Fotoğrafları kişilere göre klasörler — her şey bu bilgisayarda</div>
+    </div>
+    <div class="rozet" id="rozet">hazır</div>
+  </header>
+
+  <div id="uyari" class="uyari gizli"></div>
+
+  <div class="kartlar">
+    <div class="sayac"><b id="s-foto">0</b><span>fotoğraf tarandı</span></div>
+    <div class="sayac"><b id="s-yuz">0</b><span>yüz bulundu</span></div>
+    <div class="sayac"><b id="s-kisi">0</b><span>kişi ayırt edildi</span></div>
+    <div class="sayac"><b id="s-isim">0</b><span>isim verildi</span></div>
+    <div class="sayac"><b id="s-kut">0</b><span>kütüphanede kayıtlı</span></div>
+  </div>
+
+  <div class="kart">
+    <h2>1 · Klasörler</h2>
+    <div class="satir">
+      <div class="etiket">Fotoğraflar</div>
+      <div class="deger bos" id="y-kaynak">seçilmedi</div>
+      <button onclick="klasorSec('kaynak')">Seç</button>
+    </div>
+    <div class="satir">
+      <div class="etiket">Çıktı</div>
+      <div class="deger bos" id="y-hedef">seçilmedi</div>
+      <button onclick="klasorSec('hedef')">Seç</button>
+    </div>
+  </div>
+
+  <div class="kart">
+    <h2>2 · Tarama</h2>
+    <div class="dugmeler">
+      <button class="ana buyuk" id="b-hepsi" onclick="hepsiniYap()">Hepsini Yap</button>
+      <button id="b-deneme" onclick="baslat('tara',{deneme:true})">Deneme (300 fotoğraf)</button>
+      <button id="b-grupla" onclick="baslat('grupla')">Yeniden grupla</button>
+      <button id="b-tani" onclick="baslat('tani')">Kütüphaneden tanı</button>
+      <button class="tehlike gizli" id="b-durdur" onclick="durdur()">Durdur</button>
+    </div>
+    <div class="ipucu">
+      İlk kez çalıştırıyorsan önce <b>Deneme</b> ile 300 fotoğrafa bak, gruplar doğru mu gör.
+      Tarama uzun sürer (10.000 fotoğraf ≈ 5–6 saat) ama yarıda kesilirse kaldığı yerden devam eder.
+    </div>
+
+    <div id="ilerleme-kutu" class="gizli">
+      <div class="cubuk"><i id="cubuk"></i></div>
+      <div class="ilerleme-bilgi">
+        <span id="i-adim">—</span>
+        <span id="i-sayi"></span>
+        <span id="i-kalan"></span>
+      </div>
+      <pre class="gunluk" id="gunluk"></pre>
+    </div>
+  </div>
+
+  <div class="kart">
+    <h2>3 · Kişiler <span id="kisi-sayisi" style="color:var(--soluk);font-weight:400"></span></h2>
+    <div id="kisiler-alan">
+      <div class="bos-durum">
+        <div class="ikon">👥</div>
+        Henüz kişi yok. Önce tarama yap.
+      </div>
+    </div>
+    <div class="dugmeler">
+      <button onclick="kisileriYukle()">Yenile</button>
+      <button onclick="baslat('ogren')">İsimleri kütüphaneye öğret</button>
+    </div>
+    <div class="ipucu">
+      Bir kişiye isim verdiğinde program o yüzü hatırlar; sonraki bölümde kendisi tanır.
+      <span class="etiketcik">kütüphaneden</span> etiketi, ismin otomatik bulunduğunu gösterir — onaylamak için kutuya dokunman yeterli.
+    </div>
+  </div>
+
+  <div class="kart">
+    <h2>4 · Klasörleme</h2>
+    <div class="dugmeler">
+      <button id="b-onizle" onclick="baslat('onizleme')">Önce hesapla (hiçbir şey yazmaz)</button>
+      <button class="ana" id="b-klasorle" onclick="klasorleOnayla()">Klasörleri Oluştur</button>
+      <button onclick="post('/api/klasor-ac')">Çıktı klasörünü aç</button>
+    </div>
+    <div class="ipucu">
+      exFAT disklerde fotoğraflar gerçek kopya olarak yazılır (yer kaplar), NTFS'te ise
+      bağlantı kurulur (yer kaplamaz). Program hangi diskte olduğunu kendisi anlar.
+      <b>Önce hesapla</b> ile ne kadar yer gerektiğini yazmadan görebilirsin.
+    </div>
+  </div>
+
+  <datalist id="bilinen-isimler"></datalist>
+</div>
+
+<script>
+const T = new URLSearchParams(location.search).get("t") || "";
+const $ = s => document.querySelector(s);
+let calisiyor = false, sonBitti = "";
+
+async function al(yol){ const r = await fetch(yol + "?t=" + T); return r.json(); }
+async function post(yol, veri){
+  const r = await fetch(yol + "?t=" + T, {method:"POST",
+    headers:{"Content-Type":"application/json"}, body: JSON.stringify(veri||{})});
+  return r.json();
+}
+function uyar(m){
+  const u = $("#uyari");
+  if(!m){ u.classList.add("gizli"); return; }
+  u.textContent = m; u.classList.remove("gizli");
+  setTimeout(()=>u.classList.add("gizli"), 6000);
+}
+function kisalt(y){ return y.length > 58 ? "…" + y.slice(-56) : y; }
+
+async function klasorSec(tip){
+  uyar(""); const c = await post("/api/klasor", {tip});
+  if(c.yol) durumGuncelle();
+}
+async function baslat(adim, ek){
+  uyar("");
+  const c = await post("/api/baslat", Object.assign({adim}, ek||{}));
+  if(c.hata) uyar(c.hata); else durumGuncelle();
+}
+async function durdur(){ await post("/api/durdur"); }
+
+async function hepsiniYap(){
+  const d = await al("/api/durum");
+  if(!d.ayar.kaynak_klasor) return uyar("Önce fotoğraf klasörünü seçin.");
+  sirayla = ["tara","grupla","tani"];
+  baslat(sirayla.shift());
+}
+let sirayla = [];
+
+async function klasorleOnayla(){
+  const d = await al("/api/durum");
+  if(!d.ayar.hedef_klasor) return uyar("Önce çıktı klasörünü seçin.");
+  if(confirm("Kişi klasörleri şuraya oluşturulacak:\n\n" + d.ayar.hedef_klasor +
+             "\n\nOrijinal fotoğraflarınıza dokunulmaz. Devam edilsin mi?"))
+    baslat("klasorle");
+}
+
+async function durumGuncelle(){
+  let d;
+  try{ d = await al("/api/durum"); }catch(e){ $("#rozet").textContent = "bağlantı yok"; return; }
+  const o = d.ozet;
+  $("#s-foto").textContent = o.fotograf.toLocaleString("tr");
+  $("#s-yuz").textContent  = o.yuz.toLocaleString("tr");
+  $("#s-kisi").textContent = o.kisi;
+  $("#s-isim").textContent = o.isimli;
+  $("#s-kut").textContent  = o.kutuphane;
+
+  const k = d.ayar.kaynak_klasor, h = d.ayar.hedef_klasor;
+  $("#y-kaynak").textContent = k || "seçilmedi";
+  $("#y-kaynak").className = "deger" + (k ? "" : " bos");
+  $("#y-hedef").textContent = h || "seçilmedi";
+  $("#y-hedef").className = "deger" + (h ? "" : " bos");
+
+  $("#bilinen-isimler").innerHTML =
+    (d.kutuphane_isimleri||[]).map(i=>`<option value="${i.replace(/"/g,"&quot;")}">`).join("");
+
+  calisiyor = d.calisiyor;
+  $("#rozet").textContent = calisiyor ? d.adim + "…" : "hazır";
+  $("#ilerleme-kutu").classList.toggle("gizli", !calisiyor && !d.satirlar.length);
+  $("#b-durdur").classList.toggle("gizli", !calisiyor);
+  ["b-hepsi","b-deneme","b-grupla","b-tani","b-klasorle","b-onizle"]
+    .forEach(i => $("#"+i).disabled = calisiyor);
+
+  $("#i-adim").textContent = d.adim || "—";
+  if(d.toplam){
+    const y = Math.round(d.yapilan / d.toplam * 100);
+    $("#cubuk").style.width = y + "%";
+    $("#i-sayi").textContent = d.yapilan.toLocaleString("tr") + " / " +
+      d.toplam.toLocaleString("tr") + "  ·  " + d.hiz.toFixed(1) + " foto/sn";
+    $("#i-kalan").textContent = d.kalan ? "kalan " + d.kalan : "";
+  }else{
+    $("#cubuk").style.width = calisiyor ? "100%" : "0";
+    $("#i-sayi").textContent = ""; $("#i-kalan").textContent = "";
+  }
+  $("#gunluk").textContent = (d.satirlar||[]).join("\n");
+  if(d.hata) uyar(d.hata);
+
+  if(d.bitti && d.bitti !== sonBitti){
+    sonBitti = d.bitti;
+    kisileriYukle();
+    if(sirayla.length) baslat(sirayla.shift());
+  }
+}
+
+async function kisileriYukle(){
+  const alan = $("#kisiler-alan");
+  alan.innerHTML = '<div class="bos-durum">yükleniyor…</div>';
+  let d;
+  try{ d = await al("/api/kisiler"); }catch(e){ alan.innerHTML = ""; return; }
+  const ks = d.kisiler || [];
+  $("#kisi-sayisi").textContent = ks.length ? "· " + ks.length + " kişi" : "";
+  if(!ks.length){
+    alan.innerHTML = '<div class="bos-durum"><div class="ikon">👥</div>' +
+      'Henüz kişi yok. Önce tarama yap.</div>';
+    return;
+  }
+  alan.innerHTML = '<div class="kisiler">' + ks.map(k => `
+    <div class="kisi">
+      <div class="ust">
+        <span class="no">kisi_${String(k.kume).padStart(4,"0")}</span>
+        <span class="adet">${k.fotograf} fotoğraf</span>
+      </div>
+      <div class="yuzler">${k.resimler.map(r=>`<img src="${r}" alt="">`).join("")}</div>
+      <input list="bilinen-isimler" placeholder="isim yaz…"
+             value="${(k.isim||"").replace(/"/g,"&quot;")}"
+             onchange="isimYaz(${k.kume}, this)">
+      <div class="oneri">
+        ${k.onerilen ? `<span class="etiketcik">kütüphaneden</span>
+             <span>${k.onerilen}</span>
+             <button onclick="oneriKabul(${k.kume}, ${JSON.stringify(k.onerilen)}, this)">kabul et</button>`
+          : `<span class="etiketcik yeni">yeni kişi</span>`}
+      </div>
+    </div>`).join("") + '</div>';
+}
+
+async function isimYaz(kume, kutu){
+  await post("/api/isim", {kume, isim: kutu.value});
+  const eski = kutu.style.borderColor;
+  kutu.style.borderColor = "var(--yesil)";
+  setTimeout(()=>kutu.style.borderColor = eski, 900);
+  durumGuncelle();
+}
+async function oneriKabul(kume, isim, dugme){
+  await post("/api/isim", {kume, isim});
+  const kutu = dugme.closest(".kisi").querySelector("input");
+  kutu.value = isim;
+  kutu.style.borderColor = "var(--yesil)";
+  durumGuncelle();
+}
+
+durumGuncelle();
+kisileriYukle();
+setInterval(()=>durumGuncelle(), 1200);
+</script>
+</body>
+</html>

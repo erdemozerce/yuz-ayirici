@@ -23,14 +23,36 @@ Masaüstünde **Yüz Ayırıcı** kısayolu oluşur.
 
 ## 2. Kullanım
 
-Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Bir menü açılır:
+Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Tarayıcıda bir panel açılır.
+
+> Arkada küçük siyah bir pencere kalır — **onu kapatma**, program orada çalışıyor.
+> İşin bitince kapatabilirsin.
+
+Panelde dört bölüm var:
+
+| Bölüm | Ne yaparsın |
+|---|---|
+| **1 · Klasörler** | Fotoğrafların yerini ve klasörlerin oluşacağı yeri seçersin |
+| **2 · Tarama** | *Deneme* ile 300 fotoğrafa bakarsın, sonra *Hepsini Yap* dersin |
+| **3 · Kişiler** | Her kişinin yüzlerini görür, kutuya ismini yazarsın |
+| **4 · Klasörleme** | *Önce hesapla* ile yer ihtiyacını görür, sonra klasörleri oluşturursun |
+
+Tarama sürerken ilerleme çubuğu, hız ve kalan süre canlı görünür. Bilgisayarı
+kullanmaya devam edebilirsin.
+
+Komut satırını tercih edersen eski numaralı menü de duruyor: **MENU.bat**.
+
+<details><summary>Eski menü seçenekleri</summary>
+
 
 | Seçenek | Ne yapar |
 |---|---|
-| **1** | Fotoğrafların olduğu klasörü seç (harddiskteki ana fotoğraf klasörü) |
+| **1** | Fotoğrafların olduğu klasörü seç |
 | **2** | Kişi klasörlerinin nereye oluşturulacağını seç |
-| **8** | **Önce bunu yap:** ilk 300 fotoğrafla deneme turu (~2 dakika) |
-| **3** | **Asıl iş:** hepsini tara, grupla ve klasörlere ayır |
+| **8** | İlk 300 fotoğrafla deneme turu |
+| **3** | Hepsini tara, grupla ve klasörlere ayır |
+
+</details>
 
 ### Önerilen sıra
 

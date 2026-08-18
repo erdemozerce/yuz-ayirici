@@ -130,3 +130,20 @@ en **çeşitli** örnekler tutulur (farklı açı/ışık), böylece tanıma zam
 Farklı bölüm/sezonda saç-sakal-ışık değişince benzerlik düşer. ArcFace bu değişimlere
 dayanıklıdır ama gerçek ikinci bölüm geldiğinde `--esik` gözden geçirilmeli.
 Kütüphane her onaydan sonra yeni örneklerle zenginleştiği için bu sorun kendiliğinden azalır.
+
+## Görsel arayüz (v1.6.0)
+
+`arayuz.py` + `arayuz.html`. Python'un kendi `http.server`'ı ile 127.0.0.1'de rastgele
+bir portta çalışır, tarayıcıda açılır. **Ek kütüphane yok.**
+
+- Yalnızca `127.0.0.1`'e bağlanır; her oturumda rastgele bir anahtar üretilir ve
+  anahtarsız/yanlış anahtarlı her istek **403** döner (test edildi).
+- Uzun işler `face_sorter.py` alt süreci olarak çalışır; çıktısı satır satır okunup
+  `[4120/10000] 0.49 foto/sn ... kalan: 3s 20dk` deseninden ilerleme çıkarılır.
+- Klasör seçme pencereleri **ana iş parçacığında** açılır (tkinter thread-safe değil):
+  HTTP isteği bir kuyruğa iş bırakır, ana döngü diyaloğu açıp sonucu geri verir.
+- Yüz küçük resimleri base64 JPEG olarak gömülür, dosya sunulmaz.
+- `BASLAT.bat` artık arayüzü açar; eski numaralı menü `MENU.bat` olarak duruyor.
+
+Test edildi: tüm uçlar (`/`, `/api/durum`, `/api/kisiler`), 11 kişi × 5 küçük resim,
+yetkisiz erişim reddi, canlı ilerleme gösterimi.

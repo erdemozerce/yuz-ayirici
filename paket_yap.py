@@ -21,10 +21,13 @@ CIKTI = BASE / "yuz-ayirici-kurulum.zip"
 # ZIP'e girecek dosyalar (yayinla.py, yayin/, .git disarida - onlar senin tarafin)
 ICERIK = [
     "KUR.bat",
+    "MENU.bat",
     "BASLAT.bat",
     "GUNCELLE.bat",
     "KARDESIM-ICIN.md",
     "face_sorter.py",
+    "arayuz.py",
+    "arayuz.html",
     "kutuphane.py",
     "baslat.py",
     "guncelle.py",

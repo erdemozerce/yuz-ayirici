@@ -1,0 +1,435 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+arayuz.py — Yuz Ayirici'nin gorsel arayuzu.
+
+Tarayicida acilan yerel bir panel. Internet YOK: sunucu yalniz 127.0.0.1
+adresine baglanir, rastgele bir anahtarla korunur, disaridan erisilemez.
+Ek kutuphane gerektirmez (Python'un kendi http.server'i kullanilir).
+
+Calistirmak icin:  ARAYUZ.bat  ya da  python arayuz.py
+"""
+
+import base64
+import json
+import os
+import queue
+import re
+import secrets
+import socket
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+BASE = Path(__file__).resolve().parent
+sys.path.insert(0, str(BASE))
+
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
+
+import face_sorter as motor  # noqa: E402
+
+ANAHTAR = secrets.token_urlsafe(16)
+AYARLAR = BASE / "ayarlar.json"
+
+# ---------------------------------------------------------------- durum
+durum = {
+    "calisiyor": False,
+    "adim": "",
+    "yapilan": 0,
+    "toplam": 0,
+    "hiz": 0.0,
+    "kalan": "",
+    "satirlar": [],
+    "bitti": "",
+    "hata": "",
+}
+kilit = threading.Lock()
+dialog_kuyrugu = queue.Queue()
+surec = {"p": None}
+
+
+def ayar_oku():
+    varsayilan = {
+        "kaynak_klasor": "", "hedef_klasor": "", "db": str(BASE / "faces.db"),
+        "eps": 0.50, "min_samples": 3, "mod": "auto",
+        "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
+    }
+    if AYARLAR.exists():
+        try:
+            varsayilan.update(json.loads(AYARLAR.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    return varsayilan
+
+
+def ayar_yaz(cfg):
+    AYARLAR.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------- is calistirma
+ILERLEME = re.compile(r"\[(\d+)/(\d+)\]\s+([\d.]+) foto/sn.*?kalan:\s*(.+?)\s*$")
+
+
+def is_calistir(adim, argv):
+    """face_sorter.py'yi alt surec olarak calistirir, ciktisini canli okur."""
+    with kilit:
+        if durum["calisiyor"]:
+            return False
+        durum.update(calisiyor=True, adim=adim, yapilan=0, toplam=0, hiz=0.0,
+                     kalan="", satirlar=[], bitti="", hata="")
+
+    def calis():
+        try:
+            p = subprocess.Popen(
+                [sys.executable, "-u", str(BASE / "face_sorter.py")] + [str(a) for a in argv],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", cwd=str(BASE),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            surec["p"] = p
+            for satir in p.stdout:
+                satir = satir.rstrip()
+                if not satir or satir.startswith(("Applied providers", "find model", "set det-size")):
+                    continue
+                m = ILERLEME.search(satir)
+                with kilit:
+                    if m:
+                        durum["yapilan"] = int(m.group(1))
+                        durum["toplam"] = int(m.group(2))
+                        durum["hiz"] = float(m.group(3))
+                        durum["kalan"] = m.group(4)
+                    durum["satirlar"].append(satir)
+                    durum["satirlar"] = durum["satirlar"][-14:]
+            p.wait()
+            with kilit:
+                durum["bitti"] = adim
+                if p.returncode != 0:
+                    durum["hata"] = "Islem hata ile bitti (kod %s)" % p.returncode
+        except Exception as e:
+            with kilit:
+                durum["hata"] = str(e)
+        finally:
+            with kilit:
+                durum["calisiyor"] = False
+            surec["p"] = None
+
+    threading.Thread(target=calis, daemon=True).start()
+    return True
+
+
+def durdur():
+    p = surec.get("p")
+    if p and p.poll() is None:
+        p.terminate()
+        return True
+    return False
+
+
+# ---------------------------------------------------------------- veri okuma
+def db_yolu():
+    return ayar_oku().get("db") or str(BASE / "faces.db")
+
+
+def ozet():
+    yol = Path(db_yolu())
+    d = {"fotograf": 0, "yuz": 0, "kisi": 0, "isimli": 0, "kutuphane": 0}
+    if yol.exists():
+        try:
+            c = sqlite3.connect(str(yol))
+            d["fotograf"] = c.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            d["yuz"] = c.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
+            d["kisi"] = c.execute(
+                "SELECT COUNT(DISTINCT cluster) FROM faces WHERE cluster>0").fetchone()[0]
+            c.close()
+        except Exception:
+            pass
+    d["isimli"] = sum(1 for v in motor.isim_csv_oku(BASE / "isimler.csv").values() if v)
+    kut = BASE / "kisi_kutuphanesi.db"
+    if kut.exists():
+        try:
+            c = sqlite3.connect(str(kut))
+            d["kutuphane"] = c.execute("SELECT COUNT(*) FROM kisiler").fetchone()[0]
+            c.close()
+        except Exception:
+            pass
+    return d
+
+
+def kucuk_resim(kayit, boy=132):
+    """Bir yuzu kirpip base64 JPEG dondurur."""
+    p, x1, y1, x2, y2 = kayit
+    img = motor.imread_unicode(p)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    mx, my = (x2 - x1) * 0.38, (y2 - y1) * 0.38
+    a1, b1 = max(int(x1 - mx), 0), max(int(y1 - my), 0)
+    a2, b2 = min(int(x2 + mx), w), min(int(y2 + my), h)
+    kirpma = img[b1:b2, a1:a2]
+    if kirpma.size == 0:
+        return None
+    kirpma = cv2.resize(kirpma, (boy, boy), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    if not ok:
+        return None
+    return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+
+
+def kisiler_listesi(adet=5):
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return []
+    con = sqlite3.connect(str(yol))
+    con.executescript(motor.DB_SCHEMA)
+    isimler = motor.isim_csv_oku(BASE / "isimler.csv")
+    oner = {r[0]: (r[1], r[2], r[3]) for r in con.execute(
+        "SELECT cluster, onerilen, puan, sayfalar FROM oneriler")}
+    out = []
+    for cid, nfoto, nyuz in con.execute(
+        "SELECT cluster, COUNT(DISTINCT path), COUNT(*) FROM faces WHERE cluster>0 "
+        "GROUP BY cluster ORDER BY COUNT(*) DESC"
+    ):
+        ornekler = motor.kume_ornekleri(con, cid, adet)
+        resimler = [r for r in (kucuk_resim(k) for k in ornekler) if r]
+        o = oner.get(cid) or (None, 0.0, "")
+        out.append({
+            "kume": cid, "fotograf": nfoto, "yuz": nyuz,
+            "isim": isimler.get(cid, ""),
+            "onerilen": o[0] or "",
+            "benzerlik": round(float(o[1] or 0), 2),
+            "resimler": resimler,
+        })
+    con.close()
+    return out
+
+
+def isim_kaydet(kume, isim):
+    yol = BASE / "isimler.csv"
+    con = sqlite3.connect(db_yolu())
+    con.executescript(motor.DB_SCHEMA)
+    motor.isim_csv_yaz(con, yol)          # eksik satirlari tamamla
+    mevcut = motor.isim_csv_oku(yol)
+    mevcut[int(kume)] = (isim or "").strip()
+
+    import csv as _csv
+    satirlar = []
+    with open(yol, newline="", encoding="utf-8-sig") as fh:
+        okuyucu = _csv.DictReader(fh, delimiter=";")
+        basliklar = okuyucu.fieldnames
+        for row in okuyucu:
+            k = int(row["kume_no"])
+            row["isim"] = mevcut.get(k, row.get("isim", ""))
+            satirlar.append(row)
+    with open(yol, "w", newline="", encoding="utf-8-sig") as fh:
+        w = _csv.DictWriter(fh, fieldnames=basliklar, delimiter=";")
+        w.writeheader()
+        w.writerows(satirlar)
+    con.close()
+    return True
+
+
+def kutuphane_isimleri():
+    kut = BASE / "kisi_kutuphanesi.db"
+    if not kut.exists():
+        return []
+    try:
+        import kutuphane
+        c = kutuphane.ac(kut)
+        out = [r[0] for r in kutuphane.liste(c)]
+        c.close()
+        return out
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------- http
+class Vekil(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _yetki(self, sorgu):
+        return sorgu.get("t", [""])[0] == ANAHTAR
+
+    def _json(self, veri, kod=200):
+        govde = json.dumps(veri, ensure_ascii=False).encode("utf-8")
+        self.send_response(kod)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(govde)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(govde)
+
+    def do_GET(self):
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        if u.path == "/" and self._yetki(q):
+            govde = (BASE / "arayuz.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(govde)))
+            self.end_headers()
+            self.wfile.write(govde)
+            return
+        if not self._yetki(q):
+            self.send_response(403)
+            self.end_headers()
+            return
+        if u.path == "/api/durum":
+            with kilit:
+                d = dict(durum)
+            d["ozet"] = ozet()
+            d["ayar"] = ayar_oku()
+            d["kutuphane_isimleri"] = kutuphane_isimleri()
+            return self._json(d)
+        if u.path == "/api/kisiler":
+            return self._json({"kisiler": kisiler_listesi()})
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self):
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        if not self._yetki(q):
+            self.send_response(403)
+            self.end_headers()
+            return
+        uzunluk = int(self.headers.get("Content-Length") or 0)
+        try:
+            veri = json.loads(self.rfile.read(uzunluk) or b"{}")
+        except Exception:
+            veri = {}
+        cfg = ayar_oku()
+
+        if u.path == "/api/klasor":
+            tip = veri.get("tip", "kaynak")
+            cevap = queue.Queue()
+            dialog_kuyrugu.put((
+                "Fotograflarin bulundugu klasoru secin" if tip == "kaynak"
+                else "Kisi klasorleri nereye olusturulsun?",
+                cfg.get("kaynak_klasor" if tip == "kaynak" else "hedef_klasor", ""),
+                cevap))
+            yol = cevap.get()
+            if yol:
+                cfg["kaynak_klasor" if tip == "kaynak" else "hedef_klasor"] = yol
+                ayar_yaz(cfg)
+            return self._json({"yol": yol})
+
+        if u.path == "/api/ayar":
+            for k in ("eps", "min_samples", "mod"):
+                if k in veri:
+                    cfg[k] = veri[k]
+            ayar_yaz(cfg)
+            return self._json({"ok": True})
+
+        if u.path == "/api/isim":
+            isim_kaydet(veri.get("kume"), veri.get("isim", ""))
+            return self._json({"ok": True})
+
+        if u.path == "/api/durdur":
+            return self._json({"ok": durdur()})
+
+        if u.path == "/api/baslat":
+            adim = veri.get("adim")
+            db = cfg["db"]
+            isimler = str(BASE / "isimler.csv")
+            if adim == "tara":
+                if not cfg.get("kaynak_klasor"):
+                    return self._json({"hata": "Once fotograf klasorunu secin"}, 400)
+                a = ["scan", "--src", cfg["kaynak_klasor"], "--db", db]
+                if veri.get("deneme"):
+                    a += ["--limit", "300"]
+                return self._json({"ok": is_calistir("Fotograflar taraniyor", a)})
+            if adim == "grupla":
+                return self._json({"ok": is_calistir("Kisiler gruplaniyor", [
+                    "cluster", "--db", db, "--eps", cfg["eps"],
+                    "--min-samples", cfg["min_samples"]])})
+            if adim == "tani":
+                return self._json({"ok": is_calistir("Kutuphaneden taniniyor", [
+                    "tani", "--db", db, "--names", isimler])})
+            if adim == "ogren":
+                return self._json({"ok": is_calistir("Kutuphaneye ogretiliyor", [
+                    "ogren", "--db", db, "--names", isimler])})
+            if adim == "klasorle":
+                if not cfg.get("hedef_klasor"):
+                    return self._json({"hata": "Once cikti klasorunu secin"}, 400)
+                return self._json({"ok": is_calistir("Klasorler olusturuluyor", [
+                    "export", "--db", db, "--dst", cfg["hedef_klasor"],
+                    "--names", isimler, "--mode", cfg["mod"], "--evet"])})
+            if adim == "onizleme":
+                if not cfg.get("hedef_klasor"):
+                    return self._json({"hata": "Once cikti klasorunu secin"}, 400)
+                return self._json({"ok": is_calistir("Onizleme", [
+                    "export", "--db", db, "--dst", cfg["hedef_klasor"],
+                    "--names", isimler, "--mode", cfg["mod"], "--dry-run"])})
+            return self._json({"hata": "bilinmeyen adim"}, 400)
+
+        if u.path == "/api/klasor-ac":
+            hedef = cfg.get("hedef_klasor")
+            if hedef and Path(hedef).exists():
+                try:
+                    os.startfile(hedef)
+                except Exception:
+                    pass
+            return self._json({"ok": True})
+
+        self.send_response(404)
+        self.end_headers()
+
+
+def bos_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def main():
+    if not (BASE / "arayuz.html").exists():
+        print("arayuz.html bulunamadi.")
+        return 1
+    port = bos_port()
+    sunucu = ThreadingHTTPServer(("127.0.0.1", port), Vekil)
+    threading.Thread(target=sunucu.serve_forever, daemon=True).start()
+    adres = "http://127.0.0.1:%d/?t=%s" % (port, ANAHTAR)
+    print("Yuz Ayirici arayuzu calisiyor.")
+    print("Tarayicida acilmadiysa su adresi yapistirin:")
+    print("   " + adres)
+    print()
+    print("Bu pencereyi KAPATMAYIN - program burada calisiyor.")
+    webbrowser.open(adres)
+
+    # tkinter pencereleri ANA is parcaciginda acilmali
+    while True:
+        try:
+            baslik, mevcut, cevap = dialog_kuyrugu.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        yol = ""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            kok = tk.Tk()
+            kok.withdraw()
+            kok.attributes("-topmost", True)
+            secim = filedialog.askdirectory(title=baslik, initialdir=mevcut or str(Path.home()))
+            kok.destroy()
+            if secim:
+                yol = str(Path(secim))
+        except Exception:
+            yol = ""
+        cevap.put(yol)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main() or 0)
+    except KeyboardInterrupt:
+        pass
