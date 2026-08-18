@@ -1,11 +1,11 @@
 {
-  "surum": "1.0.1",
-  "notlar": "Deneme surumu: guncelleme mekanizmasi testi",
+  "surum": "1.0.2",
+  "notlar": "Kurulum testindeki sure tahmini gercekci hale getirildi",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "56dbb5afe8ea397ac1110969a688202adca0385b928eb911604e628bf918b7d3"
+      "sha256": "1b0d9b8d3dd1cb5aedfc37f6d1ce40b4c8effe4c85450cd5019bfeb0c279f822"
     },
     {
       "ad": "baslat.py",
@@ -20,7 +20,7 @@
     {
       "ad": "kurulum_testi.py",
       "url": "kurulum_testi.py",
-      "sha256": "0342b59a12fd05078f6974405701d53b2688d16e35b25179ab61ac2d1dce2aac"
+      "sha256": "6c743f3f5ddbf700aca75650c351bfef5c230d131a4042978812a517b47633f9"
     },
     {
       "ad": "gereksinimler.txt",

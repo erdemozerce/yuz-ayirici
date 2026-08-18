@@ -1,58 +1,83 @@
-# Yüz Ayırıcı — fotoğrafları kişilere göre klasörleyen bot
+# Yüz Ayırıcı — teknik notlar (senin için)
 
-## 1) Kurulum (tek sefer)
+Kardeşinin kullanacağı kılavuz ayrı: [KARDESIM-ICIN.md](KARDESIM-ICIN.md)
 
-Python 3.10–3.12 kurulu olmalı (python.org, kurulumda "Add python.exe to PATH" işaretli).
+## Dosyalar ne işe yarıyor
 
-```
-pip install insightface onnxruntime opencv-python numpy scikit-learn pillow pillow-heif
-```
+| Dosya | Kimde | Ne yapar |
+|---|---|---|
+| `face_sorter.py` | ikisinde | Asıl motor: `scan` / `cluster` / `review` / `export` |
+| `baslat.py` | ikisinde | Menü (kardeşin komut satırı görmez) |
+| `guncelle.py` | ikisinde | Uzaktan güncelleme motoru |
+| `kurulum_testi.py` | ikisinde | Kurulum sonrası doğrulama + model indirme |
+| `KUR.bat` | kardeşinde | Tek tıkla kurulum (Python dahil) |
+| `BASLAT.bat` | kardeşinde | Programı açar |
+| `GUNCELLE.bat` | kardeşinde | Elle güncelleme kontrolü |
+| `yayinla.py` | **sadece sende** | Yeni sürüm yayınlar |
+| `paket_yap.py` | **sadece sende** | Kurulum ZIP'i üretir |
+| `yayin/` | **sadece sende** | Yayınlanan sürümün dağıtım kopyası |
 
-`insightface` kurulumu hata verirse (C derleyicisi ister):
-Microsoft "Build Tools for Visual Studio" → "Desktop development with C++" kurulup tekrar dene.
+## Kurulumu kardeşine gönderme
 
-NVIDIA ekran kartı varsa (çok daha hızlı):
-```
-pip uninstall onnxruntime
-pip install onnxruntime-gpu
-```
-ve `scan` komutuna `--gpu` ekle.
-
-## 2) Adımlar
-
-Önce küçük bir denemeyle başla (300 fotoğraf):
-
-```
-cd %USERPROFILE%\Desktop\yuz-ayirici
-python face_sorter.py scan --src "D:\Fotograflar" --db faces.db --limit 300
-python face_sorter.py cluster --db faces.db
-python face_sorter.py review --db faces.db --out inceleme.html
+```bash
+python paket_yap.py https://raw.githubusercontent.com/KULLANICI/DEPO/main/yayin/surum.json
 ```
 
-`inceleme.html` dosyasını tarayıcıda aç, gruplar doğru mu bak. İyiyse limitsiz tam tarama:
+Oluşan `yuz-ayirici-kurulum.zip` (~17 KB) dosyasını gönder. Kardeşin ZIP'i açıp
+`KUR.bat`'a çift tıklar; Python yoksa onu bile kendi kurar (winget ile).
 
-```
-python face_sorter.py scan --src "D:\Fotograflar" --db faces.db
-python face_sorter.py cluster --db faces.db
-python face_sorter.py review --db faces.db --out inceleme.html
-```
+## Güncelleme yayınlama
 
-`isimler.csv` dosyasını Excel'de aç, tanıdığın kişilerin `isim` sütununu doldur (boş bırakılanlar `kisi_0001` gibi kalır). Sonra:
+Kodda bir şey değiştirdikten sonra:
 
-```
-python face_sorter.py export --db faces.db --dst "D:\Kisiler" --mode hardlink
+```bash
+python yayinla.py 1.0.3 "Ne değişti kısa açıklama"
 ```
 
-## 3) Ayar ipuçları
+Sonra `yayin/` klasörünü GitHub'a it:
 
-- **Aynı kişi birden çok klasöre bölündü** → `cluster --eps 0.58` (birleştirmeyi artırır)
-- **Farklı kişiler aynı klasöre karıştı** → `cluster --eps 0.42` (ayrımı sertleştirir)
-- **Çok fazla küçük/anlamsız grup** → `--min-samples 4 --min-face 60`
-- Kümeleme saniyeler sürer; tarama (`scan`) tekrarlanmaz, istediğin kadar dene.
+```bash
+git add -A && git commit -m "surum 1.0.3" && git push
+```
 
-## 4) Notlar
+Kardeşin programı bir sonraki açışında "YENİ SÜRÜM VAR" uyarısını görür,
+"E" der ve program kendini günceller. Günde bir kez sessizce kontrol eder;
+internet yoksa hiçbir şey olmaz, program normal açılır.
 
-- `--mode hardlink` (varsayılan): fotoğraflar **ekstra yer kaplamaz**, aynı dosya birden çok klasörde görünür. Aynı disk ve NTFS şart. Bir klasörden silmek orijinali silmez.
-- `--mode copy`: gerçek kopya. Bir fotoğrafta 3 kişi varsa 3 kopya oluşur → disk 2–3 katı yer ister.
-- Orijinal fotoğraflara **hiç dokunulmaz**, hiçbir şey silinmez/taşınmaz.
-- `scan` kesilirse aynı komutu tekrar çalıştır, kaldığı yerden devam eder.
+## Güncelleme mekanizmasının güvenliği
+
+- **Yalnız HTTPS.** `http://` adresi kodun içinde reddediliyor.
+- **SHA-256 doğrulaması.** Her dosyanın özeti `surum.json` ile karşılaştırılır;
+  tek bayt oynasa güncelleme iptal edilir ve yerel dosyalara dokunulmaz.
+- **Önce indir, sonra değiştir.** Dosyalar geçici klasöre inip doğrulanmadan
+  hiçbir şey değiştirilmez — yarım güncelleme oluşmaz.
+- **Otomatik yedek.** Eski sürüm `yedek/<sürüm>_<tarih>` klasörüne kopyalanır.
+- **Dosya adı kontrolü.** Manifest'teki `..\` gibi yol denemeleri reddedilir.
+
+Bu testlerin hepsi geçti (sahte/kurcalanmış dosya reddi dahil).
+
+## Dikkat: satır sonları
+
+`.gitattributes` içindeki `* -text` satırına dokunma. Git, Windows'ta LF'yi CRLF'ye
+çevirirse dosya özetleri tutmaz ve kardeşindeki güncelleme "kurcalanmış dosya"
+diyerek reddedilir.
+
+## `.bat` dosyaları güncellenmiyor
+
+`KUR.bat`, `BASLAT.bat`, `GUNCELLE.bat` bilerek güncelleme listesinin dışında —
+Windows çalışan bir batch dosyasını satır satır okur, ortasından değiştirilirse
+tuhaf davranır. Bunlarda değişiklik gerekirse yeni ZIP göndermek gerekir
+(nadiren olur; bu dosyalar sadece Python'u bulup çağırıyor).
+
+## Ayar ipuçları
+
+- Aynı kişi birden çok klasöre bölündü → `cluster --eps 0.58`
+- Farklı kişiler karıştı → `cluster --eps 0.42`
+- Çok fazla anlamsız grup → `--min-samples 4 --min-face 60`
+- Kümeleme saniyeler sürer; `scan` tekrarlanmaz, istediğin kadar dene.
+
+## Ölçülen performans (bu makine, GPU'suz)
+
+- Tarama: ~3.6 fotoğraf/saniye → 10.000 fotoğraf ≈ 45–90 dakika
+- NVIDIA kartı olan makinede `KUR.bat` otomatik olarak GPU sürümünü kurar, 5–10 kat hızlanır.
+- Doğrulama testi: 2 kişi × 5 varyant (ölçek/parlaklık/kırpma/ayna) → %100 doğru ayrım.

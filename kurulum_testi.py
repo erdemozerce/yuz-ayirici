@@ -51,9 +51,13 @@ def main():
     for _ in range(tur):
         app.get(deneme)
     saniye = (time.time() - t1) / tur
-    hiz = 1.0 / max(saniye, 1e-6)
+    ham = 1.0 / max(saniye, 1e-6)
+    # Gercek fotograflarda diskten okuma, JPEG cozme ve birden fazla yuz
+    # islemi de var; olculen ham hizin kabaca %60'i gerceklesir.
+    hiz = ham * 0.6
     print("     yaklasik %.1f fotograf/saniye" % hiz)
-    print("     10.000 fotograf tahmini: %.1f saat" % (10000 / hiz / 3600))
+    print("     10.000 fotograf icin tahmini sure: %.1f - %.1f saat"
+          % (10000 / ham / 3600, 10000 / hiz / 3600))
 
     # ilk ayar dosyalari
     ayar = BASE / "ayarlar.json"
