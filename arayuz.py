@@ -108,7 +108,7 @@ def ayar_oku():
         "db": str(BASE / "faces.db"),
         "eps": 0.50, "min_samples": 3, "mod": "auto",
         "duzen": "altklasor-kisi", "derinlik": 0, "etiket_mod": "gomulu",
-        "secki_atla": False, "hizli_tarama": False,
+        "secki_atla": False, "hizli_tarama": False, "kaliteli_tarama": False,
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -215,12 +215,38 @@ def ozet():
     return d
 
 
+_RESIM_BELLEK = {}      # yuz_id -> base64 kirpma (tarama degismedikce gecerli)
+
+
 def kucuk_resim(kayit, boy=132):
-    """Bir yuzu kirpip base64 JPEG dondurur. kayit = (yuz_id, yol, x1,y1,x2,y2)"""
-    _, p, x1, y1, x2, y2 = kayit
-    img = motor.imread_unicode(p)
+    """Bir yuzu kirpip base64 JPEG dondurur. kayit = (yuz_id, yol, x1,y1,x2,y2, supheli)"""
+    yuz_id, p, x1, y1, x2, y2 = kayit[0], kayit[1], kayit[2], kayit[3], kayit[4], kayit[5]
+    anahtar = (db_yolu(), yuz_id)
+    onbellek = _RESIM_BELLEK.get(anahtar)
+    if onbellek is not None:
+        return onbellek
+    # 7728x5152'lik kareyi tam cozmek yuz basina ~0.7 sn suruyordu; kirpma
+    # zaten 132 px'e inecegi icin JPEG'i dogrudan kucuk cozuyoruz.
+    yuz_en = max(float(x2) - float(x1), 1.0)
+    img, olcek = None, 1.0
+    for bayrak, o in ((cv2.IMREAD_REDUCED_COLOR_4, 0.25),
+                      (cv2.IMREAD_REDUCED_COLOR_2, 0.5)):
+        if yuz_en * o >= boy * 0.70:
+            try:
+                veri = np.fromfile(str(p), dtype=np.uint8)
+                img = cv2.imdecode(veri, bayrak)
+            except Exception:
+                img = None
+            if img is not None:
+                olcek = o
+            break
+    if img is None:
+        img = motor.imread_unicode(p)
+        olcek = 1.0
     if img is None:
         return None
+    x1, y1, x2, y2 = (float(x1) * olcek, float(y1) * olcek,
+                      float(x2) * olcek, float(y2) * olcek)
     h, w = img.shape[:2]
     mx, my = (x2 - x1) * 0.38, (y2 - y1) * 0.38
     a1, b1 = max(int(x1 - mx), 0), max(int(y1 - my), 0)
@@ -232,7 +258,10 @@ def kucuk_resim(kayit, boy=132):
     ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, 82])
     if not ok:
         return None
-    return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+    sonuc = "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+    if len(_RESIM_BELLEK) < 4000:
+        _RESIM_BELLEK[anahtar] = sonuc
+    return sonuc
 
 
 def kutuphane_listesi():
@@ -394,13 +423,18 @@ def kisiler_listesi(adet=5):
         for k in ornekler:
             r = kucuk_resim(k)
             if r:
-                resimler.append({"id": k[0], "resim": r})
+                resimler.append({"id": k[0], "resim": r,
+                                 "supheli": k[6] is not None})
+        n_supheli = con.execute(
+            "SELECT COUNT(DISTINCT path) FROM faces WHERE cluster=? AND supheli IS NOT NULL",
+            (cid,)).fetchone()[0]
         o = oner.get(cid) or (None, 0.0, "")
         out.append({
             "kume": cid, "fotograf": nfoto, "yuz": nyuz,
             "isim": isimler.get(cid, ""),
             "onerilen": o[0] or "",
             "benzerlik": round(float(o[1] or 0), 2),
+            "supheli": n_supheli,
             "resimler": resimler,
         })
     con.close()
@@ -488,6 +522,24 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json(d)
         if u.path == "/api/kisiler":
             return self._json({"kisiler": kisiler_listesi()})
+        if u.path == "/api/supheli":
+            kume = q.get("kume", [""])[0]
+            yol = Path(db_yolu())
+            if not yol.exists() or not kume:
+                return self._json({"kareler": []})
+            con = sqlite3.connect(str(yol))
+            con.executescript(motor.DB_SCHEMA)
+            try:
+                satirlar = con.execute(
+                    "SELECT path, supheli FROM faces WHERE cluster=? AND supheli IS NOT NULL "
+                    "ORDER BY supheli", (int(kume),)).fetchall()
+            except Exception:
+                satirlar = []
+            con.close()
+            return self._json({"kareler": [
+                {"ad": os.path.basename(p), "klasor": os.path.dirname(p),
+                 "benzerlik": round(float(b or 0), 3)} for p, b in satirlar]})
+
         if u.path == "/api/kutuphane":
             return self._json({"kisiler": kutuphane_listesi()})
         if u.path == "/api/rapor":
@@ -573,7 +625,7 @@ class Vekil(BaseHTTPRequestHandler):
 
         if u.path == "/api/ayar":
             for k in ("eps", "min_samples", "mod", "duzen", "derinlik", "etiket_mod",
-                      "secki_atla", "hizli_tarama"):
+                      "secki_atla", "hizli_tarama", "kaliteli_tarama"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -748,7 +800,9 @@ class Vekil(BaseHTTPRequestHandler):
                 if not kaynaklar:
                     return self._json({"hata": "Once en az bir fotograf klasoru ekleyin"}, 400)
                 a = ["scan", "--src"] + kaynaklar + ["--db", db]
-                if cfg.get("hizli_tarama"):
+                if cfg.get("kaliteli_tarama"):
+                    a += ["--kalite"]
+                elif cfg.get("hizli_tarama"):
                     a += ["--hizli"]
                 if veri.get("deneme"):
                     a += ["--limit", "300"]

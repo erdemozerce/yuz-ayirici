@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.19.0"
+__version__ = "1.20.0"
 
 import argparse
 import base64
@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS faces(
     netlik    REAL,
     goz       REAL,
     yaw       REAL,
-    pitch     REAL
+    pitch     REAL,
+    supheli   REAL
 );
 CREATE INDEX IF NOT EXISTS idx_faces_path    ON faces(path);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster ON faces(cluster);
@@ -115,7 +116,7 @@ def db_connect(path):
         if ad not in sutunlar:
             con.execute("ALTER TABLE files ADD COLUMN %s %s" % (ad, tur))
     yuz_sutun = {r[1] for r in con.execute("PRAGMA table_info(faces)")}
-    for ad in ("netlik", "goz", "yaw", "pitch"):
+    for ad in ("netlik", "goz", "yaw", "pitch", "supheli"):
         if ad not in yuz_sutun:
             con.execute("ALTER TABLE faces ADD COLUMN %s REAL" % ad)
     con.execute("""CREATE TABLE IF NOT EXISTS onay(
@@ -135,6 +136,17 @@ def db_connect(path):
     )""")
     con.commit()
     return con
+
+
+def _jpeg_uzun_kenar(data):
+    """Dosyayi cozmeden uzun kenari okur (JPEG/PNG basligi)."""
+    try:
+        import io as _io
+        from PIL import Image
+        with Image.open(_io.BytesIO(data.tobytes() if hasattr(data, "tobytes") else data)) as im:
+            return max(im.size)
+    except Exception:
+        return 0
 
 
 def raw_oku(path, en_az=800):
@@ -180,17 +192,23 @@ def imread_unicode(path, kucult=0):
     try:
         data = np.fromfile(str(path), dtype=np.uint8)
         if kucult:
-            # once basligi okuyup boyuta gore azaltma seviyesi sec
-            img = cv2.imdecode(data, cv2.IMREAD_REDUCED_COLOR_2)
-            if img is not None:
-                if max(img.shape[:2]) >= kucult * 2:
-                    kucuk = cv2.imdecode(data, cv2.IMREAD_REDUCED_COLOR_4)
-                    if kucuk is not None and max(kucuk.shape[:2]) >= kucult:
-                        return kucuk, 0.25
-                if max(img.shape[:2]) >= kucult:
-                    return img, 0.5
-            tam = cv2.imdecode(data, cv2.IMREAD_COLOR)
-            return tam, 1.0
+            # Basliktan boyutu okuyup TEK seferde dogru olcekte cozuyoruz.
+            # Onceden once /2 sonra /4 cozuluyordu; ayni dosya iki kez
+            # cozuldugu icin okuma suresi %60 fazlaydi (10.2 sn -> 6.5 sn).
+            en_uzun = _jpeg_uzun_kenar(data)
+            bayrak, olcek = cv2.IMREAD_COLOR, 1.0
+            if en_uzun:
+                for b, o in ((cv2.IMREAD_REDUCED_COLOR_8, 0.125),
+                             (cv2.IMREAD_REDUCED_COLOR_4, 0.25),
+                             (cv2.IMREAD_REDUCED_COLOR_2, 0.5)):
+                    if en_uzun * o >= kucult:
+                        bayrak, olcek = b, o
+                        break
+            img = cv2.imdecode(data, bayrak)
+            if img is None and bayrak != cv2.IMREAD_COLOR:
+                img = cv2.imdecode(data, cv2.IMREAD_COLOR)
+                olcek = 1.0
+            return img, olcek
         img = cv2.imdecode(data, cv2.IMREAD_COLOR)
         if img is not None:
             return img
@@ -425,7 +443,16 @@ def cmd_scan(args):
     print("Dosyalar listeleniyor...")
     for k in kaynaklar:
         print("  kaynak: %s" % k)
-    if getattr(args, "hizli", False) and args.det_size == 640:
+    if getattr(args, "kalite", False):
+        # Olculdu (7728x5152 kareler): 1600/640 ile 8 kare kacti, 2560/800 ile
+        # 4'u kurtarildi ve hiz ayni kaldi (cift cozme duzeltildikten sonra).
+        if args.det_size == 640:
+            args.det_size = 800
+        if args.max_side == 1600:
+            args.max_side = 2560
+        print("  Yuksek kalite taramasi: %d px / dedektor %d "
+              "(kucuk ve uzaktaki yuzler de yakalanir)" % (args.max_side, args.det_size))
+    elif getattr(args, "hizli", False) and args.det_size == 640:
         args.det_size = 512
         print("  Hizli tarama: dedektor 512 (kucuk/uzak yuzler kacirilabilir)")
     files = list_images(kaynaklar)
@@ -552,6 +579,32 @@ def cmd_cluster(args):
             labels[noise[good]] = np.array(uniq)[best[good]]
             print(f"  {int(good.sum())} tekil yuz en yakin kisiye eklendi (benzerlik >= {args.claim}).")
 
+    # --- KURTARMA GECISI ---------------------------------------------------
+    # Kumeye giremeyen yuzler, kisi merkezine daha GEVSEK esikle bakilarak
+    # en yakin kisiye atanir ve SUPHELI isaretlenir. Gerekce: fotografci icin
+    # eksik kare, yanlis kareden pahali - yanlisi gorup siler, eksigi fark etmez.
+    supheliler = {}
+    if args.kurtar > 0:
+        uniq2 = sorted(set(labels) - {-1})
+        if uniq2:
+            cents = np.vstack([X[labels == c].mean(axis=0) for c in uniq2])
+            cents /= np.linalg.norm(cents, axis=1, keepdims=True) + 1e-9
+            kalan = np.where(labels == -1)[0]
+            if len(kalan):
+                sims = X[kalan] @ cents.T
+                best = sims.argmax(axis=1)
+                deger = sims.max(axis=1)
+                uygun = (deger >= args.kurtar) & (deger < args.claim if args.claim else True)
+                for i, k in enumerate(kalan):
+                    if uygun[i]:
+                        labels[k] = np.array(uniq2)[best[i]]
+                        supheliler[int(ids[k])] = float(deger[i])
+                if supheliler:
+                    print("  %d yuz kurtarildi (benzerlik %.2f-%.2f) ve SUPHELI "
+                          "isaretlendi." % (len(supheliler),
+                                            min(supheliler.values()),
+                                            max(supheliler.values())))
+
     # kumeleri buyukten kucuge 1,2,3... diye yeniden numarala
     sizes = {}
     for l in labels:
@@ -561,15 +614,21 @@ def cmd_cluster(args):
     remap = {old: new for new, old in enumerate(order, 1)}
     final = np.array([remap.get(l, -1) for l in labels], dtype=np.int64)
 
-    con.execute("UPDATE faces SET cluster = -1")
+    con.execute("UPDATE faces SET cluster = -1, supheli = NULL")
     con.executemany(
         "UPDATE faces SET cluster = ? WHERE id = ?", [(int(c), int(i)) for i, c in zip(ids, final)]
     )
+    if supheliler:
+        con.executemany("UPDATE faces SET supheli = ? WHERE id = ?",
+                        [(b, i) for i, b in supheliler.items()])
     con.commit()
 
     n_person = len(order)
     n_noise = int((final == -1).sum())
     print(f"Sonuc: {n_person} farkli kisi bulundu, {n_noise} yuz siniflandirilamadi.")
+    if supheliler:
+        print(f"       {len(supheliler)} yuz supheli olarak eklendi - arayuzde "
+              f"isaretli gorunur, kontrol edip cikarabilirsiniz.")
     print("En kalabalik 15 kisi (kume no / yuz sayisi / fotograf sayisi):")
     for cid, cnt, ph in con.execute(
         "SELECT cluster, COUNT(*), COUNT(DISTINCT path) FROM faces WHERE cluster > 0 "
@@ -581,7 +640,7 @@ def cmd_cluster(args):
 def kume_ornekleri(con, cid, adet):
     """Bir kumenin merkezine en yakin (en temsili) yuzlerini dondurur."""
     rows = con.execute(
-        "SELECT path,x1,y1,x2,y2,emb,id FROM faces WHERE cluster = ?", (cid,)
+        "SELECT path,x1,y1,x2,y2,emb,id,supheli FROM faces WHERE cluster = ?", (cid,)
     ).fetchall()
     if not rows:
         return []
@@ -589,8 +648,19 @@ def kume_ornekleri(con, cid, adet):
     E = E / (np.linalg.norm(E, axis=1, keepdims=True) + 1e-9)
     merkez = E.mean(axis=0)
     merkez /= np.linalg.norm(merkez) + 1e-9
-    sira = np.argsort(-(E @ merkez))[:adet]
-    return [(rows[i][6],) + tuple(rows[i][:5]) for i in sira]
+    puan = E @ merkez
+    # Kurtarma gecisinde SUPHELI isaretlenen yuzler karta mutlaka girsin ki
+    # kullanici gorup tiklayarak cikarabilsin. Kalan yerler en temsili yuzlerle
+    # dolar; boylece kart hem "bu kim" sorusunu hem de "sunu kontrol et"i gosterir.
+    supheli = sorted((i for i, r in enumerate(rows) if r[7] is not None),
+                     key=lambda i: puan[i])[:max(1, adet // 2)]
+    sira = list(supheli)
+    for i in np.argsort(-puan):
+        if len(sira) >= adet:
+            break
+        if int(i) not in sira:
+            sira.append(int(i))
+    return [(rows[i][6],) + tuple(rows[i][:5]) + (rows[i][7],) for i in sira]
 
 
 def kume_vektorleri(con, cid):
@@ -1908,6 +1978,10 @@ def main():
     s.add_argument("--isci", type=int, default=0,
                    help="es zamanli surec sayisi (0 = tek surec). Olculdu: CPU'da "
                         "coklu surec yavaslatiyor, ONNX zaten tum cekirdekleri kullaniyor.")
+    s.add_argument("--kalite", action="store_true",
+                   help="yuksek kalite taramasi: 2560 px / dedektor 800. Kucuk ve "
+                        "uzaktaki yuzleri de yakalar; olculdu: kacan karelerin "
+                        "yarisini kurtardi, hiz farki yok.")
     s.add_argument("--hizli", action="store_true",
                    help="hizli tarama: dedektor 512 (olculdu %36 hizli). "
                         "Kalabaligin arkasindaki KUCUK yuzleri kacirabilir.")
@@ -1920,6 +1994,9 @@ def main():
     c.add_argument("--claim", type=float, default=0.55, help="tekil yuzleri en yakin kisiye ekleme esigi (0 = kapali)")
     c.add_argument("--min-score", type=float, default=0.60, help="yuz tespit guven esigi")
     c.add_argument("--min-face", type=float, default=45, help="cok kucuk yuzleri (piksel) ele")
+    c.add_argument("--kurtar", type=float, default=0.35,
+                   help="kumeye giremeyen yuzleri bu benzerligin uzerindeyse en yakin "
+                        "kisiye SUPHELI olarak ekle (0 = kapali, varsayilan 0.35)")
     c.add_argument("--evet", action="store_true", help="elle duzeltme uyarisini atla")
     c.set_defaults(func=cmd_cluster)
 

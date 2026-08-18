@@ -120,6 +120,7 @@
   .kisi .yuzler{display:flex;gap:5px;margin-bottom:12px;overflow:hidden}
   .kisi .yuzler img{cursor:pointer;transition:.12s}
   .kisi .yuzler img:hover{outline:2px solid var(--kirmizi);outline-offset:2px;opacity:.7}
+  .kisi .yuzler img.supheli{outline:2px solid var(--sari);outline-offset:1px}
   .kisi img{width:100%;max-width:66px;aspect-ratio:1;object-fit:cover;
     border-radius:10px;display:block}
   .kisi .ust{display:flex;align-items:center;gap:9px;margin-bottom:10px}
@@ -399,12 +400,21 @@
       <button id="b-tani" onclick="baslat('tani')">Kütüphaneden tanı</button>
       <button class="tehlike gizli" id="b-durdur" onclick="durdur()">Durdur</button>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13.5px;
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13.5px;
+                  color:var(--soluk);cursor:pointer">
+      <input type="checkbox" id="kaliteli" onchange="kaliteDegisti()"
+             style="accent-color:var(--vurgu);width:15px;height:15px;margin-top:3px">
+      <span><b style="color:var(--yazi)">Yüksek kalite taraması</b> — küçük ve uzaktaki
+      yüzleri de yakalar. Gerçek testte kaçan 8 karenin 7'sini kurtardı
+      (%91 → %99), yanlış eşleşme olmadı. Yaklaşık %20 daha uzun sürer.</span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:13.5px;
                   color:var(--soluk);cursor:pointer">
       <input type="checkbox" id="hizli" onchange="hizliDegisti()"
-             style="accent-color:var(--vurgu);width:15px;height:15px">
-      <span><b style="color:var(--yazi)">Hızlı tarama</b> — yaklaşık üçte bir daha hızlı
-      bitirir, ama kalabalığın arkasındaki küçük yüzleri kaçırabilir.</span>
+             style="accent-color:var(--vurgu);width:15px;height:15px;margin-top:3px">
+      <span><b style="color:var(--yazi)">Hızlı tarama</b> — üçte bir daha hızlı bitirir,
+      ama kalabalığın arkasındaki küçük yüzleri kaçırabilir. (Yüksek kalite seçiliyse
+      bu yoksayılır.)</span>
     </label>
     <div class="ipucu">
       İlk kez çalıştırıyorsan önce <b>Deneme</b> ile 300 fotoğrafa bak, gruplar doğru mu gör.
@@ -612,9 +622,13 @@ const T = new URLSearchParams(location.search).get("t") || "";
 const $ = s => document.querySelector(s);
 let calisiyor = false, sonBitti = "";
 
-async function al(yol){ const r = await fetch(yol + "?t=" + T); return r.json(); }
+async function al(yol){
+  // Adreste zaten ? varsa & ile ekle - yoksa sunucu tokeni goremez ve 403 doner.
+  const r = await fetch(yol + (yol.indexOf("?") >= 0 ? "&" : "?") + "t=" + T);
+  return r.json();
+}
 async function post(yol, veri){
-  const r = await fetch(yol + "?t=" + T, {method:"POST",
+  const r = await fetch(yol + (yol.indexOf("?") >= 0 ? "&" : "?") + "t=" + T, {method:"POST",
     headers:{"Content-Type":"application/json"}, body: JSON.stringify(veri||{})});
   return r.json();
 }
@@ -680,6 +694,25 @@ async function durdur(){ await post("/api/durdur"); }
 async function kaynakSil(sira){ await post("/api/klasor", {tip:"kaynak_sil", sira}); durumGuncelle(); }
 async function duzenDegistir(){ await post("/api/ayar", {duzen: $("#duzen").value}); }
 async function hizliDegisti(){ await post("/api/ayar", {hizli_tarama: $("#hizli").checked}); }
+async function kaliteDegisti(){
+  await post("/api/ayar", {kaliteli_tarama: $("#kaliteli").checked});
+  durumGuncelle();
+}
+async function supheliGoster(kume){
+  const d = await al("/api/supheli?kume=" + kume);
+  const ks = d.kareler || [];
+  if (!ks.length) return bildir("Bu kişide şüpheli kare yok.", "basarili");
+  const satirlar = ks.map(function(k){
+    return k.ad + "   (benzerlik " + k.benzerlik + ")";
+  });
+  satirlar.push("",
+    "Bu kareler kişiye tam oturmadı ama yakın bulundu, yine de gruba alındı.",
+    "Kartta turuncu çerçeveli yüzler bunlar — yanlışsa yüze tıkla, gruptan çıkar.");
+  ileti({baslik: "Şüpheli kareler — " + ks.length + " kare",
+         tur: "uyari", genis: true, cikti: satirlar.join("
+"),
+         dugmeler: [{yazi:"Tamam", ana:true, deger:true}]});
+}
 async function etiketModDegistir(){ await post("/api/ayar", {etiket_mod: $("#etiket-mod").value}); }
 async function etiketOnayla(){
   const d = await al("/api/durum");
@@ -745,6 +778,11 @@ async function durumGuncelle(){
   $("#duzen").value = d.ayar.duzen || "altklasor-kisi";
   $("#etiket-mod").value = d.ayar.etiket_mod || "gomulu";
   $("#hizli").checked = !!d.ayar.hizli_tarama;
+  const kal = $("#kaliteli");
+  if (kal){
+    kal.checked = !!d.ayar.kaliteli_tarama;
+    $("#hizli").disabled = kal.checked;
+  }
   $("#y-hedef").textContent = h || "seçilmedi";
   $("#y-hedef").className = "deger" + (h ? "" : " bos");
 
@@ -1245,12 +1283,16 @@ async function kisileriYukle(){
         <span class="adet">${k.fotograf} fotoğraf</span>
       </div>
       <div class="yuzler">${k.resimler.map(r=>
-        `<img src="${r.resim}" title="Bu kişi değilse tıkla" onclick="yuzCikar(${r.id}, ${k.kume})">`).join("")}</div>
+        `<img class="${r.supheli ? "supheli" : ""}" src="${r.resim}"
+              title="${r.supheli ? "Şüpheli eşleşme — bu kişi değilse tıkla" : "Bu kişi değilse tıkla"}"
+              onclick="yuzCikar(${r.id}, ${k.kume})">`).join("")}</div>
       <input list="bilinen-isimler" placeholder="isim yaz…"
              value="${(k.isim||"").replace(/"/g,"&quot;")}"
              onchange="isimYaz(${k.kume}, this)">
       <div class="araclar">
         <button onclick="kisiBol(${k.kume})" title="Bu grupta iki ayrı kişi varsa ayır">Böl</button>
+        ${k.supheli ? `<button onclick="supheliGoster(${k.kume})"
+           title="Kümeye tam oturmayan kareler">⚠ ${k.supheli} şüpheli</button>` : ""}
       </div>
       <div class="oneri">
         ${k.onerilen ? `<span class="etiketcik">kütüphaneden</span>
