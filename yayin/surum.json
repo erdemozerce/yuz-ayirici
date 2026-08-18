@@ -1,6 +1,6 @@
 {
-  "surum": "1.17.0",
-  "notlar": "Windows'un cirkin uyari kutulari kaldirildi: tum onay/soru/sonuc pencereleri artik programin kendi tasariminda, ekranin ortasinda",
+  "surum": "1.18.0",
+  "notlar": "Kose bildirimleri: kisa mesajlar artik sayfanin neresinde olursan ol gorunuyor",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "cd3abbd33cdd0307ce536a3d6d134c842cda208b23591a313931f1341a4b7881"
+      "sha256": "c20662f0d7eab2b9105d8684a55916403388d62e667074f2ff79c4324a6baae4"
     },
     {
       "ad": "arayuz.py",
@@ -25,7 +25,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "ae6eda35c75c357f7bba0f91ad7154bf351dcbf1a9e584541910a206ec8f151b"
+      "sha256": "af65385d502826a9d2f8c2150cb3ecfa45c1045ff2c3dcfe2318b6135517f5eb"
     },
     {
       "ad": "kutuphane.py",

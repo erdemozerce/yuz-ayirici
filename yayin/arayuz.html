@@ -192,6 +192,26 @@
   .ortu .altlik{padding:18px 24px 20px;display:flex;gap:9px;justify-content:flex-end;
     flex-wrap:wrap}
 
+  /* ---- kose bildirimi ---- */
+  #bildirimler{position:fixed;right:20px;bottom:20px;z-index:120;
+    display:flex;flex-direction:column;gap:9px;align-items:flex-end;
+    pointer-events:none;max-width:min(400px,calc(100vw - 40px))}
+  .bildirim{pointer-events:auto;background:var(--yuzey);border:1px solid var(--cizgi);
+    border-left:3px solid var(--vurgu);border-radius:12px;padding:12px 15px;
+    box-shadow:0 10px 30px rgba(0,0,0,.28);font-size:13px;color:var(--yazi);
+    display:flex;align-items:flex-start;gap:10px;
+    animation:kay .22s cubic-bezier(.2,.8,.2,1)}
+  .bildirim.basarili{border-left-color:var(--yesil)}
+  .bildirim.hata{border-left-color:var(--kirmizi)}
+  .bildirim.uyari{border-left-color:var(--sari)}
+  .bildirim .im2{font-size:14px;line-height:1.35;flex:none}
+  .bildirim.basarili .im2{color:var(--yesil)}
+  .bildirim.hata .im2{color:var(--kirmizi)}
+  .bildirim.uyari .im2{color:var(--sari)}
+  .bildirim.kapaniyor{animation:sol .2s ease-in forwards}
+  @keyframes kay{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+  @keyframes sol{to{opacity:0;transform:translateX(18px)}}
+
   /* ---- kenar menu ---- */
   .govde{display:flex;align-items:flex-start;max-width:1180px;margin:0 auto;gap:0}
   .yanmenu{position:sticky;top:69px;flex:none;width:210px;padding:24px 14px 24px 26px}
@@ -494,6 +514,8 @@
   </div>
 </section>
 
+  <div id="bildirimler"></div>
+
   <div id="ileti" class="ortu gizli">
     <div class="pencere" id="ileti-pencere">
       <div class="ust">
@@ -520,12 +542,33 @@ async function post(yol, veri){
     headers:{"Content-Type":"application/json"}, body: JSON.stringify(veri||{})});
   return r.json();
 }
-function uyar(m){
-  const u = $("#uyari");
-  if(!m){ u.classList.add("gizli"); return; }
-  u.textContent = m; u.classList.remove("gizli");
-  setTimeout(()=>u.classList.add("gizli"), 6000);
+/* Kisa geri bildirim: ekranin sag alt kosesinde, sayfa nerede olursa olsun
+   gorunur. Onceden sayfanin en ustundeki serit kullaniliyordu ve kullanici
+   asagidayken hic gormuyordu. */
+function bildir(mesaj, tur, sure){
+  if(!mesaj) return;
+  const kap = document.getElementById("bildirimler");
+  if(!kap) return;
+  const b = document.createElement("div");
+  b.className = "bildirim " + (tur || "");
+  const im = document.createElement("span");
+  im.className = "im2";
+  im.textContent = ({basarili:"✓", hata:"!", uyari:"!"}[tur] || "•");
+  const y = document.createElement("span");
+  y.textContent = mesaj;
+  b.appendChild(im); b.appendChild(y);
+  b.onclick = function(){ kapat(); };
+  kap.appendChild(b);
+  let bitti = false;
+  function kapat(){
+    if(bitti) return;
+    bitti = true;
+    b.classList.add("kapaniyor");
+    setTimeout(function(){ b.remove(); }, 220);
+  }
+  setTimeout(kapat, sure || (tur === "hata" ? 7000 : 3800));
 }
+function uyar(m){ if(m) bildir(m, "hata"); }
 function kisalt(y){ return y.length > 58 ? "…" + y.slice(-56) : y; }
 
 async function klasorSec(tip){
@@ -533,19 +576,22 @@ async function klasorSec(tip){
   const dugmeler = document.querySelectorAll("button");
   try{
     const c = await post("/api/klasor", {tip});
-    if(c && c.hata) return uyar(c.hata);
+    if(c && c.hata) return bildir(c.hata, "hata");
+    if(c && c.yol) bildir(tip === "hedef" ? "Çıktı klasörü ayarlandı." : "Klasör eklendi.",
+                          "basarili");
     durumGuncelle();
   }catch(e){
-    uyar("Program penceresi kapanmış olabilir. Masaüstündeki kısayoldan yeniden açın.");
+    bildir("Program penceresi kapanmış olabilir. Kısayoldan yeniden açın.", "hata");
   }
 }
 async function elleEkle(tip){
   const kutu = $(tip === "hedef" ? "#elle-hedef" : "#elle-kaynak");
   const yol = (kutu.value || "").trim();
-  if(!yol) return uyar("Önce klasör yolunu yapıştırın.");
+  if(!yol) return bildir("Önce klasör yolunu yapıştırın.", "uyari");
   const c = await post("/api/klasor", {tip, yol});
-  if(c && c.hata) return uyar(c.hata);
+  if(c && c.hata) return bildir(c.hata, "hata");
   kutu.value = "";
+  bildir(tip === "hedef" ? "Çıktı klasörü ayarlandı." : "Klasör eklendi.", "basarili");
   durumGuncelle();
 }
 async function baslat(adim, ek){
@@ -680,7 +726,7 @@ async function durumGuncelle(){
 
 async function guncellemeKontrol(){
   const c = await post("/api/guncelle", {});
-  uyar(c.mesaj || "");
+  bildir(c.mesaj || "", c.yeni ? "uyari" : "basarili");
   durumGuncelle();
 }
 async function guncelle(){
@@ -834,7 +880,7 @@ function kutBirlestirGuncelle(){
 }
 async function kutIslem(islem, ek){
   const c = await post("/api/kutuphane-islem", Object.assign({islem}, ek || {}));
-  if (c && c.mesaj) await bilgi("Kişi kütüphanesi", c.mesaj, c.ok ? "basarili" : "hata");
+  if (c && c.mesaj) bildir(c.mesaj, c.ok ? "basarili" : "hata", c.ok ? 4200 : 7000);
   kutuphaneYukle();
   durumGuncelle();
 }
@@ -1017,6 +1063,7 @@ async function isimYaz(kume, kutu){
   const eski = kutu.style.borderColor;
   kutu.style.borderColor = "var(--yesil)";
   setTimeout(()=>kutu.style.borderColor = eski, 900);
+  bildir(kutu.value ? ('"' + kutu.value + '" kaydedildi.') : "İsim silindi.", "basarili", 2200);
   durumGuncelle();
 }
 async function oneriKabul(kume, isim, dugme){

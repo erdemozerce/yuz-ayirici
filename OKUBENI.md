@@ -498,3 +498,18 @@ Aynı hata sınıfı bu projede üçüncü kez çıktı (deneme turu, kopuk bağ
 Artık **her işlem bitince** sonuç penceresi ekranın ortasında açılıyor ve çıktının
 tamamını gösteriyor. Ön izlemede ayrıca **"Klasörleri şimdi oluştur"** düğmesi çıkıyor —
 hesaplamadan sonra doğal adım.
+
+## İki kademeli geri bildirim (v1.18.0)
+
+| Ne zaman | Nerede | Örnek |
+|---|---|---|
+| **Karar / sonuç** | Ekranın ortasında büyük pencere | klasörleme onayı, ön izleme özeti, silme onayı, işlem çıktısı |
+| **Kısa bilgi** | Sağ alt köşede küçük bildirim | "Klasör eklendi", "İsim kaydedildi", hata mesajları |
+
+Köşe bildirimi `position: fixed` — sayfa nereye kaydırılmış olursa olsun görünür.
+Renk sol kenardan veriliyor (yeşil/kırmızı/sarı), tıklayınca kapanıyor, hatalar
+7 saniye, diğerleri ~4 saniye duruyor. Üst üste gelenler alt alta diziliyor.
+
+**Neden:** kısa mesajlar sayfanın *en üstündeki* şeritte çıkıyordu; kullanıcı aşağıda
+çalışırken hiç görmüyordu. Bu, projedeki dördüncü "işlem çalışıyor ama geri bildirim
+kullanıcının baktığı yerde değil" hatasıydı — artık ikisi de yapısal olarak çözüldü.
