@@ -1,6 +1,6 @@
 {
-  "surum": "1.12.0",
-  "notlar": "Oyuncu veto listesi, kunye/caption sablonu, teslim paketi + Turkce yol ve dosya tarihi duzeltmeleri",
+  "surum": "1.12.1",
+  "notlar": "Deneme turu artik gruplama ve tanimayi da calistiriyor; tarandi ama gruplanmadi durumunda ekranda 'Simdi grupla' dugmesi",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "208a6ce4ae59f1914d666d0cf8870732288e85aa03629f87c3e7c57f8dd34819"
+      "sha256": "5e0e40733f16a9dfaa8e5e4ad80ab67c74c7a2df963f75c27a9827e68ccfd1fc"
     },
     {
       "ad": "arayuz.py",
@@ -20,7 +20,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "1b5d3f7ee5cd2e59331502c7ada3009902bb386f666898c10b890480eea3d2ff"
+      "sha256": "1968eb2c0ee8d847faafa137e1ff27f7bb1f3aa8ab183266561b944807979ef9"
     },
     {
       "ad": "kutuphane.py",

@@ -160,7 +160,7 @@
     <h2>2 · Tarama</h2>
     <div class="dugmeler">
       <button class="ana buyuk" id="b-hepsi" onclick="hepsiniYap()">Hepsini Yap</button>
-      <button id="b-deneme" onclick="baslat('tara',{deneme:true})">Deneme (300 fotoğraf)</button>
+      <button id="b-deneme" onclick="denemeYap()">Deneme (300 fotoğraf)</button>
       <button id="b-grupla" onclick="baslat('grupla')">Yeniden grupla</button>
       <button id="b-tani" onclick="baslat('tani')">Kütüphaneden tanı</button>
       <button class="tehlike gizli" id="b-durdur" onclick="durdur()">Durdur</button>
@@ -300,8 +300,15 @@ async function etiketOnayla(){
 async function hepsiniYap(){
   const d = await al("/api/durum");
   if(!(d.ayar.kaynak_klasorler||[]).length) return uyar("Önce en az bir fotoğraf klasörü ekleyin.");
-  sirayla = ["tara","grupla","tani"];
-  baslat(sirayla.shift());
+  sirayla = ["grupla","tani"];
+  baslat("tara");
+}
+async function denemeYap(){
+  const d = await al("/api/durum");
+  if(!(d.ayar.kaynak_klasorler||[]).length) return uyar("Önce en az bir fotoğraf klasörü ekleyin.");
+  // Deneme de gruplamayi calistirmali; yoksa tarama bitince ekranda hicbir sey belirmez.
+  sirayla = ["grupla","tani"];
+  baslat("tara", {deneme:true});
 }
 let sirayla = [];
 
@@ -361,8 +368,13 @@ async function durumGuncelle(){
 
   if(d.bitti && d.bitti !== sonBitti){
     sonBitti = d.bitti;
-    kisileriYukle();
-    if(sirayla.length) baslat(sirayla.shift());
+    if(sirayla.length){
+      const sonraki = sirayla.shift();
+      baslat(sonraki);
+    } else {
+      kisileriYukle();
+      if(!d.hata) uyar("");
+    }
   }
 }
 
@@ -374,8 +386,13 @@ async function kisileriYukle(){
   const ks = d.kisiler || [];
   $("#kisi-sayisi").textContent = ks.length ? "· " + ks.length + " kişi" : "";
   if(!ks.length){
+    const d2 = await al("/api/durum");
+    const tarandi = (d2.ozet && d2.ozet.fotograf) ? d2.ozet.fotograf : 0;
     alan.innerHTML = '<div class="bos-durum"><div class="ikon">👥</div>' +
-      'Henüz kişi yok. Önce tarama yap.</div>';
+      (tarandi
+        ? ('<b>' + tarandi.toLocaleString("tr") + ' fotoğraf tarandı</b> ama henüz gruplanmadı.<br><br>' +
+           '<button class="ana" onclick="baslat('grupla')">Şimdi grupla</button>')
+        : 'Henüz kişi yok. Önce tarama yap.') + '</div>';
     return;
   }
   alan.innerHTML = '<div class="kisiler">' + ks.map(k => `
