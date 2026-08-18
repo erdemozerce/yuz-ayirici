@@ -80,34 +80,28 @@ Klasörler `0001_Ahmet`, `0002_Ayşe` şeklinde yeniden oluşur.
 
 ---
 
-## 3b. İsimleri otomatik buldurmak (isteğe bağlı)
+## 3b. Program isimleri hatırlıyor
 
-Fotoğraflarındaki kişiler tanınmış isimlerse, program onları tanıyıp sana
-**isim önerebilir**. Menüden:
+**Bir kişiye bir kez isim verdiğinde, program o yüzü hatırlar.** Sonraki bölümü
+tarattığında aynı kişileri kendisi tanıyıp klasörü doğru isimle açar. Sen sadece
+yeni çıkan kişilere isim verirsin.
 
-- **10)** İsimleri internetten bul — her kişi için 3 kare AWS'e sorulur
-- **11)** Önerilen isimleri onayla — tek tek geçer, Enter'a basınca öneriyi kabul eder
+Nasıl işliyor:
 
-Bir ismin kabul edilmesi için **en az 2 karede aynı kişi** çıkması ve güvenin
-%85'i geçmesi gerekiyor. Tek karede çıkan ya da düşük güvenli eşleşmeler eleniyor.
+1. İlk bölümde isimleri yazarsın (menü **11**)
+2. Program o kişilerin yüzlerini kişi kütüphanesine kaydeder
+3. İkinci bölümde tarama biter bitmez tanıdıklarını otomatik isimlendirir (menü **10**)
+4. Tanımadıklarını "yeni kişi" diye bırakır — onlara sen isim verirsin
+5. Onlar da kütüphaneye eklenir; arşiv büyüdükçe program daha çok kişi tanır
 
-Öneriler asla doğrudan klasöre yazılmaz. Sen onaylamadan hiçbir klasör isimlenmez.
+**Menü 12** ile kütüphanede kimlerin kayıtlı olduğunu görebilirsin.
 
-**Kurulum (bir kere):**
-1. `console.aws.amazon.com` → IAM → Users → kullanıcı seç (yoksa oluştur)
-2. Security credentials → **Create access key**
-3. Kullanıcıya sadece **AmazonRekognitionReadOnlyAccess** yetkisi ver — başka yetki gerekmez
-4. Program klasöründe `aws_anahtar.json` dosyası oluştur, içine şunu yaz:
+Bu iş **tamamen bu bilgisayarda** yapılır. İnternet yok, bulut yok, hiçbir
+fotoğraf hiçbir yere gönderilmez. Kütüphane dosyası fotoğraf içermez, sadece
+yüzlerden çıkarılan sayılar tutar (geri fotoğrafa çevrilemez).
 
-```json
-{"access_key": "AKIA...", "secret_key": "...", "bolge": "us-east-1"}
-```
-
-Maliyet görüntü başına ~$0.001. 50 kişilik bir arşiv ≈ 150 sorgu ≈ 15 sent.
-
-⚠️ **Bunu bilerek yap:** bu adımda kişi başına 3 yüz kırpması AWS'e gönderilir.
-Programın geri kalanı tamamen internetsiz çalışır, fotoğrafların hiçbir yere gitmez.
-Bu özelliği hiç kullanmazsan da program eksiksiz çalışır — isimleri elle de yazabilirsin.
+Program bir ismi ancak **emin olduğunda** yapıştırır; şüphedeyse "yeni kişi" der
+ve sana sorar. Yanlış isim yazmaktansa boş bırakmayı tercih eder.
 
 ---
 

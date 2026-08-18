@@ -5,4 +5,3 @@ scikit-learn
 pillow
 pillow-heif
 insightface
-boto3

@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.5.1"
 
 import argparse
 import base64
@@ -299,48 +299,12 @@ def kume_ornekleri(con, cid, adet):
     return [rows[i][:5] for i in sira]
 
 
-def yuz_kirp_jpeg(kayit, marj=0.6, hedef=900, kalite=88):
-    """
-    Yuzu paylı kirpar. Dondurur: (jpeg_baytlari, hedef_kutu)
-    hedef_kutu = kirpma icindeki HEDEF yuzun konumu (sol, ust, gen, yuk) 0-1 orani.
-    Okunamazsa (None, None).
-    """
-    p, x1, y1, x2, y2 = kayit
-    img = imread_unicode(p)
-    if img is None:
-        return None, None
-    h, w = img.shape[:2]
-    gen = x2 - x1
-    yuk = y2 - y1
-    cx1 = max(int(x1 - gen * marj), 0)
-    cy1 = max(int(y1 - yuk * marj * 0.8), 0)
-    cx2 = min(int(x2 + gen * marj), w)
-    cy2 = min(int(y2 + yuk * marj * 1.4), h)
-    kirpma = img[cy1:cy2, cx1:cx2]
-    if kirpma.size == 0:
-        return None, None
-    kh, kw = kirpma.shape[:2]
-    hedef_kutu = ((x1 - cx1) / kw, (y1 - cy1) / kh, gen / kw, yuk / kh)
-
-    k = max(kh, kw)
-    if k > hedef:
-        o = hedef / k
-        kirpma = cv2.resize(kirpma, (int(kw * o), int(kh * o)), interpolation=cv2.INTER_AREA)
-    ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, kalite])
-    return (buf.tobytes() if ok else None), hedef_kutu
-
-
-def kutu_ortusmesi(a, b):
-    """Iki kutunun kesisim/birlesim orani (IoU). Kutu = (sol, ust, gen, yuk)."""
-    ax1, ay1, ax2, ay2 = a[0], a[1], a[0] + a[2], a[1] + a[3]
-    bx1, by1, bx2, by2 = b[0], b[1], b[0] + b[2], b[1] + b[3]
-    kx1, ky1 = max(ax1, bx1), max(ay1, by1)
-    kx2, ky2 = min(ax2, bx2), min(ay2, by2)
-    if kx2 <= kx1 or ky2 <= ky1:
-        return 0.0
-    kesisim = (kx2 - kx1) * (ky2 - ky1)
-    birlesim = a[2] * a[3] + b[2] * b[3] - kesisim
-    return kesisim / birlesim if birlesim > 0 else 0.0
+def kume_vektorleri(con, cid):
+    """Bir kumenin tum yuz vektorleri."""
+    rows = con.execute("SELECT emb FROM faces WHERE cluster = ?", (cid,)).fetchall()
+    if not rows:
+        return np.zeros((0, 512), np.float32)
+    return np.vstack([np.frombuffer(r[0], np.float32) for r in rows])
 
 
 def isim_csv_oku(yol):
@@ -370,144 +334,130 @@ def isim_csv_yaz(con, yol):
         "SELECT cluster, onerilen, puan, ornek, toplam FROM oneriler")}
     with open(yol, "w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh, delimiter=";")
-        w.writerow(["kume_no", "fotograf_sayisi", "onerilen_isim", "guven", "isim"])
+        w.writerow(["kume_no", "fotograf_sayisi", "onerilen_isim", "benzerlik", "isim"])
         for cid, nfoto, _ in kumeler:
             o = oner.get(cid)
-            guven = "%d/%d kare" % (o[3], o[4]) if o and o[1] else ""
-            w.writerow([cid, nfoto, (o[1] if o else "") or "", guven, mevcut.get(cid, "")])
+            benzerlik = ("%.2f" % o[2]) if o and o[1] else ""
+            w.writerow([cid, nfoto, (o[1] if o else "") or "", benzerlik, mevcut.get(cid, "")])
     return len(kumeler)
 
 
+def kutuphaneye_isle(con, names_yol, kutuphane_yolu, kaynak="", sessiz=False):
+    """isimler.csv'de ismi olan her kumeyi kalici kutuphaneye ogretir."""
+    import kutuphane
+
+    isimler = isim_csv_oku(names_yol)
+    dolu = {k: v for k, v in isimler.items() if v}
+    if not dolu:
+        if not sessiz:
+            print("Ogrenilecek isim yok (isimler.csv bos).")
+        return 0
+    kcon = kutuphane.ac(kutuphane_yolu)
+    n = 0
+    for cid, isim in sorted(dolu.items()):
+        E = kume_vektorleri(con, cid)
+        if not len(E):
+            continue
+        adet = kutuphane.ogret(kcon, isim, E, kaynak=kaynak)
+        n += 1
+        if not sessiz:
+            print("  ogrenildi: %-28s (%d ornek saklaniyor)" % (isim, adet))
+    kcon.close()
+    if not sessiz:
+        print("%d kisi kutuphaneye islendi." % n)
+    return n
+
+
 # --------------------------------------------------------------------------
-# 3b) IDENTIFY - internetten isim onerisi (Google Vision web detection)
+# 3b) TANI - kalici kutuphaneden isim eslestir (internet YOK)
 # --------------------------------------------------------------------------
-def cmd_identify(args):
-    import tanima
+def cmd_tani(args):
+    import kutuphane
 
     con = db_connect(args.db)
-    try:
-        istemci = tanima.hazirla(args.bolge)
-    except RuntimeError as e:
-        print(e)
+    kcon = kutuphane.ac(args.kutuphane)
+    kayitli = kutuphane.herkes(kcon)
+    if not kayitli:
+        print("Kisi kutuphanesi bos.")
+        print("Once bir bolumu isimlendirin; isimler onaylanınca kutuphane kendiliginden olusur.")
+        print("Sonraki bolumlerde ayni kisiler otomatik taninacak.")
         return
 
-    kumeler = [
-        (cid, nfoto) for cid, nfoto in con.execute(
-            "SELECT cluster, COUNT(DISTINCT path) FROM faces WHERE cluster > 0 "
-            "GROUP BY cluster ORDER BY COUNT(*) DESC")
-        if nfoto >= args.min_photos
-    ]
-    if not args.yeniden:
-        var = {r[0] for r in con.execute("SELECT cluster FROM oneriler")}
-        kumeler = [k for k in kumeler if k[0] not in var]
-    if args.limit:
-        kumeler = kumeler[: args.limit]
+    kumeler = con.execute(
+        "SELECT cluster, COUNT(DISTINCT path) FROM faces WHERE cluster > 0 "
+        "GROUP BY cluster ORDER BY COUNT(*) DESC"
+    ).fetchall()
     if not kumeler:
-        print("Sorgulanacak yeni kume yok. (--yeniden ile hepsini tekrar sorabilirsiniz)")
+        print("Once 'cluster' calistirin.")
         return
 
-    sorgu = len(kumeler) * args.samples
     print()
-    print("=" * 64)
-    print("  INTERNETTEN ISIM ONERISI  -  AWS Rekognition")
-    print("=" * 64)
-    print("  Sorgulanacak kisi : %d" % len(kumeler))
-    print("  Kisi basina kare  : %d" % args.samples)
-    print("  Toplam sorgu      : %d" % sorgu)
-    print("  Tahmini maliyet   : ~$%.2f  (goruntu basina ~$0.001)" % (sorgu * 0.001))
-    print("  Guven esigi       : %%%.0f" % args.esik)
-    print("-" * 64)
-    print("  DIKKAT: bu adimda kisi basina %d yuz kirpmasi AWS'e GONDERILIR." % args.samples)
-    print("  Diger tum adimlar internetsiz calisir. Arsivin tamami gonderilmez.")
-    print("  Gelen isimler sadece ONERIDIR; siz onaylamadan klasor isimlenmez.")
-    print("=" * 64)
-    if not args.evet:
-        try:
-            print()
-            c = input("  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
-        except EOFError:
-            c = "h"
-        if c not in ("", "e", "evet", "y", "yes"):
-            print("  Iptal edildi - hicbir sorgu yapilmadi.")
-            return
+    print("=" * 66)
+    print("  KUTUPHANEDEN TANIMA  -  internete cikmaz")
+    print("=" * 66)
+    print("  Kutuphanedeki kisi : %d" % len(kayitli))
+    print("  Karsilastirilacak  : %d kume" % len(kumeler))
+    print("  Esik               : %.2f benzerlik" % args.esik)
+    print("-" * 66)
 
-    print()
-    bulunan = hata = 0
-    for sira, (cid, nfoto) in enumerate(kumeler, 1):
-        ornekler = kume_ornekleri(con, cid, args.samples)
-        oylar, kullanilan, elenen = {}, 0, [0]
-        for kayit in ornekler:
-            jpeg, hedef_kutu = yuz_kirp_jpeg(kayit)
-            if jpeg is None:
-                continue
-            try:
-                eslesmeler = tanima.sorgula(istemci, jpeg)
-            except RuntimeError as e:
-                print("  !! %s" % e)
-                hata += 1
-                if hata >= 3 and bulunan == 0:
-                    print("  Ust uste hata alindi, duruldu. Kimlik/yetki ayarini kontrol edin.")
-                    return
-                continue
-            kullanilan += 1
-            if not eslesmeler:
-                continue
-
-            # AWS goruntudeki BASKA bir yuzu tanimis olabilir (kalabalik kareler).
-            # Sadece hedef yuzle ortusen eslesmeyi kabul et.
-            en_uygun, en_ortusme = None, 0.0
-            for isim, guven, baglantilar, kutu in eslesmeler:
-                ort = kutu_ortusmesi(kutu, hedef_kutu)
-                if ort > en_ortusme:
-                    en_uygun, en_ortusme = (isim, guven, baglantilar), ort
-            if en_uygun is None or en_ortusme < args.ortusme:
-                elenen[0] += len(eslesmeler)
-                continue
-
-            isim, guven, baglantilar = en_uygun
-            if not isim or guven < args.esik:
-                continue
-            kayitlar = oylar.setdefault(isim, [0, 0.0, baglantilar])
-            kayitlar[0] += 1
-            kayitlar[1] += guven
-
-        en_iyi, oy, ort_guven, baglantilar = "", 0, 0.0, []
-        if oylar:
-            en_iyi = max(oylar, key=lambda a: (oylar[a][0], oylar[a][1]))
-            oy = oylar[en_iyi][0]
-            ort_guven = oylar[en_iyi][1] / max(oy, 1)
-            baglantilar = oylar[en_iyi][2]
-
-        yeterli = bool(en_iyi) and (oy >= 2 or kullanilan <= 1)
-        if yeterli:
+    bulunan = 0
+    for cid, nfoto in kumeler:
+        E = kume_vektorleri(con, cid)
+        isim, ben, ikinci, gerekce = kutuphane.tani(kayitli, E, args.esik, args.fark)
+        if isim:
             bulunan += 1
             con.execute(
                 "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
-                "VALUES(?,?,?,?,?,?)",
-                (cid, en_iyi, ort_guven, oy, kullanilan, " | ".join(baglantilar[:2])),
-            )
-            print("  [%d/%d] kisi_%04d (%d foto) -> %s  (%d/%d karede, %%%.0f guven)"
-                  % (sira, len(kumeler), cid, nfoto, en_iyi, oy, kullanilan, ort_guven))
+                "VALUES(?,?,?,?,?,?)", (cid, isim, ben, len(E), len(E), "kutuphane"))
+            print("  kisi_%04d (%3d foto) -> %-26s benzerlik %.2f" % (cid, nfoto, isim, ben))
         else:
             con.execute(
                 "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
-                "VALUES(?,?,?,?,?,?)",
-                (cid, None, ort_guven, oy, kullanilan, ""),
-            )
-            not_ = "taninmadi" if not en_iyi else "tutarsiz (%d/%d karede)" % (oy, kullanilan)
-            if elenen[0]:
-                not_ += "  [%d eslesme baska yuze aitti, elendi]" % elenen[0]
-            print("  [%d/%d] kisi_%04d (%d foto) -> %s"
-                  % (sira, len(kumeler), cid, nfoto, not_))
-        con.commit()
+                "VALUES(?,?,?,?,?,?)", (cid, None, ben, len(E), len(E), gerekce))
+            print("  kisi_%04d (%3d foto) -> yeni kisi  (%s, en yakin %.2f)"
+                  % (cid, nfoto, gerekce, ben))
+    con.commit()
+    kcon.close()
 
     yol = args.names or "isimler.csv"
     isim_csv_yaz(con, yol)
+    print("-" * 66)
+    print("%d kume kutuphaneden taniandi, %d kume yeni kisi."
+          % (bulunan, len(kumeler) - bulunan))
+    print("Oneriler %s dosyasina yazildi. Onaylamak icin: onayla" % yol)
+
+
+# --------------------------------------------------------------------------
+# 3d) OGREN / KISILER - kutuphane yonetimi
+# --------------------------------------------------------------------------
+def cmd_ogren(args):
+    con = db_connect(args.db)
+    kutuphaneye_isle(con, args.names or "isimler.csv", args.kutuphane,
+                     kaynak=Path(args.db).name)
+
+
+def cmd_kisiler(args):
+    import kutuphane
+
+    kcon = kutuphane.ac(args.kutuphane)
+    if args.sil:
+        if kutuphane.sil(kcon, args.sil):
+            print("Silindi: %s" % args.sil)
+        else:
+            print("Kutuphanede boyle bir kisi yok: %s" % args.sil)
+        return
+    satirlar = kutuphane.liste(kcon)
+    if not satirlar:
+        print("Kisi kutuphanesi bos.")
+        return
     print()
-    print("%d kisi icin isim onerildi (%d kisi sorgulandi). Oneriler: %s"
-          % (bulunan, len(kumeler), yol))
-    if bulunan:
-        print("Onaylamak icin menuden 11, ya da: python face_sorter.py onayla --db %s" % args.db)
+    print("KISI KUTUPHANESI  (%d kisi)" % len(satirlar))
+    print("-" * 66)
+    print("  %-30s %8s  %-16s" % ("isim", "ornek", "son guncelleme"))
+    for isim, adet, eklenme, guncelleme in satirlar:
+        print("  %-30s %8d  %-16s" % (isim, adet, guncelleme or eklenme or ""))
+    print("-" * 66)
+    print("Bir kisiyi silmek icin:  python face_sorter.py kisiler --sil \"Isim Soyisim\"")
 
 
 # --------------------------------------------------------------------------
@@ -571,8 +521,14 @@ def cmd_confirm(args):
         w.writerows(satirlar)
 
     dolu = sum(1 for v in mevcut.values() if v)
-    print("\n%d kisiye isim verildi -> %s" % (dolu, yol))
-    print("Klasorleri bu isimlerle olusturmak icin 'export' adimini tekrar calistirin.")
+    print()
+    print("%d kisiye isim verildi -> %s" % (dolu, yol))
+    if dolu:
+        print()
+        print("Kisi kutuphanesine isleniyor (sonraki bolumlerde otomatik taninacaklar):")
+        kutuphaneye_isle(con, yol, getattr(args, "kutuphane", None), kaynak=Path(args.db).name)
+    print()
+    print("Klasorleri bu isimlerle olusturmak icin 'export' adimini calistirin.")
 
 
 # --------------------------------------------------------------------------
@@ -853,6 +809,13 @@ def cmd_export(args):
     else:
         print("Not: gercek kopya olusturuldu; orijinal fotograflariniza dokunulmadi.")
 
+    # klasor isimleri kesinlesti -> kutuphane bunlari ogrensin
+    if not args.ogrenme_yok and names:
+        print()
+        print("Kisi kutuphanesi guncelleniyor...")
+        kutuphaneye_isle(con, args.names, getattr(args, "kutuphane", None),
+                         kaynak=Path(args.db).name)
+
 
 # --------------------------------------------------------------------------
 def main():
@@ -886,27 +849,33 @@ def main():
     r.add_argument("--overwrite-names", action="store_true")
     r.set_defaults(func=cmd_review)
 
-    i = sub.add_parser("isimlendir", help="internetten isim onerisi al (AWS Rekognition)")
-    i.add_argument("--db", default="faces.db")
-    i.add_argument("--names", default="isimler.csv")
-    i.add_argument("--samples", type=int, default=3, help="kisi basina sorgulanacak kare")
-    i.add_argument("--min-photos", type=int, default=3, help="bu kadar fotografta gorunmeyeni sorma")
-    i.add_argument("--esik", type=float, default=95.0,
-                   help="eslesme guven esigi, yuzde (varsayilan 95). Gercek veride "
-                        "dogru eslesme %99.7, yanlis eslesme %87.2 cikti - 95 ikisini ayirir.")
-    i.add_argument("--bolge", default="us-east-1", help="AWS bolgesi")
-    i.add_argument("--ortusme", type=float, default=0.35,
-                   help="taninan yuz hedef yuzle en az bu kadar ortusmeli (IoU)")
-    i.add_argument("--limit", type=int, default=0, help="sadece ilk N kisiyi sorgula (deneme)")
-    i.add_argument("--yeniden", action="store_true", help="daha once sorulanlari tekrar sor")
-    i.add_argument("--evet", action="store_true", help="onay sormadan basla")
-    i.set_defaults(func=cmd_identify)
+    t = sub.add_parser("tani", help="kalici kutuphaneden isimleri esle (internetsiz)")
+    t.add_argument("--db", default="faces.db")
+    t.add_argument("--names", default="isimler.csv")
+    t.add_argument("--kutuphane", default=None, help="kisi kutuphanesi dosyasi")
+    t.add_argument("--esik", type=float, default=0.45,
+                   help="tanima esigi (ayni kisi ~0.75, farkli kisi ~0.08 olcusuyle)")
+    t.add_argument("--fark", type=float, default=0.06,
+                   help="birinci ile ikinci aday arasindaki en az fark")
+    t.set_defaults(func=cmd_tani)
 
-    o = sub.add_parser("onayla", help="onerilen isimleri tek tek onayla/duzelt")
+    o = sub.add_parser("onayla", help="onerilen isimleri onayla/duzelt ve kutuphaneye ogret")
     o.add_argument("--db", default="faces.db")
     o.add_argument("--names", default="isimler.csv")
+    o.add_argument("--kutuphane", default=None)
     o.add_argument("--hepsi", action="store_true", help="ismi olanlari da tekrar sor")
     o.set_defaults(func=cmd_confirm)
+
+    g = sub.add_parser("ogren", help="isimler.csv'deki isimleri kutuphaneye isle")
+    g.add_argument("--db", default="faces.db")
+    g.add_argument("--names", default="isimler.csv")
+    g.add_argument("--kutuphane", default=None)
+    g.set_defaults(func=cmd_ogren)
+
+    ks = sub.add_parser("kisiler", help="kutuphanedeki kisileri listele / sil")
+    ks.add_argument("--kutuphane", default=None)
+    ks.add_argument("--sil", default="", help="silinecek kisinin tam ismi")
+    ks.set_defaults(func=cmd_kisiler)
 
     e = sub.add_parser("export", help="kisi klasorlerini olustur")
     e.add_argument("--db", default="faces.db")
@@ -919,6 +888,9 @@ def main():
     e.add_argument("--export-nofaces", action="store_true", help="_yuz_yok klasoru de olustur")
     e.add_argument("--dry-run", action="store_true", help="dosya tasimadan sadece raporla")
     e.add_argument("--evet", action="store_true", help="onay sormadan yaz (otomasyon icin)")
+    e.add_argument("--kutuphane", default=None)
+    e.add_argument("--ogrenme-yok", action="store_true",
+                   help="klasor isimlerini kutuphaneye ogretme")
     e.set_defaults(func=cmd_export)
 
     args = ap.parse_args()

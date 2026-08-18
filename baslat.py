@@ -166,19 +166,21 @@ def tam_akis(cfg):
     if not cfg["kaynak_klasor"]:
         print("Once fotograflarin bulundugu klasoru secin (1 numarali secenek).")
         return
-    print("\n[1/4] Fotograflar taraniyor (en uzun adim, saatler surebilir)...")
+    print("\n[1/5] Fotograflar taraniyor (en uzun adim, saatler surebilir)...")
     if not calistir("scan", "--src", cfg["kaynak_klasor"], "--db", cfg["db"]):
         return
-    print("\n[2/4] Kisiler gruplaniyor...")
+    print("\n[2/5] Kisiler gruplaniyor...")
     if not calistir("cluster", "--db", cfg["db"], "--eps", cfg["eps"],
                     "--min-samples", cfg["min_samples"]):
         return
-    print("\n[3/4] Inceleme sayfasi hazirlaniyor...")
+    print("\n[3/5] Daha once taninan kisiler kutuphaneden isimlendiriliyor...")
+    calistir("tani", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
+    print("\n[4/5] Inceleme sayfasi hazirlaniyor...")
     calistir("review", "--db", cfg["db"], "--out", str(BASE / "inceleme.html"))
     hedef = hedef_onayla(cfg)
     if not hedef:
         return
-    print("\n[4/4] Kisi klasorleri olusturuluyor...")
+    print("\n[5/5] Kisi klasorleri olusturuluyor...")
     calistir("export", "--db", cfg["db"], "--dst", hedef,
              "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"])
     print("\nBITTI! Klasorler: %s" % hedef)
@@ -205,8 +207,9 @@ def menu():
         print("   7) Klasorlere ayir")
         print("   8) Deneme turu (ilk 300 fotograf)")
         print("   9) Guncellemeleri kontrol et")
-        print("  10) Isimleri internetten bul (Google Vision)")
-        print("  11) Onerilen isimleri onayla / duzelt")
+        print("  10) Taninan kisileri kutuphaneden isimlendir")
+        print("  11) Isimleri onayla / duzelt  (kutuphane ogrenir)")
+        print("  12) Kisi kutuphanesi - kimler kayitli")
         print("   0) Cikis")
         s = input("\nSeciminiz: ").strip()
 
@@ -265,9 +268,11 @@ def menu():
         elif s == "9":
             guncelleme_bak(sessiz=False)
         elif s == "10":
-            calistir("isimlendir", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
+            calistir("tani", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
         elif s == "11":
             calistir("onayla", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
+        elif s == "12":
+            calistir("kisiler")
         elif s == "0":
             return
         else:

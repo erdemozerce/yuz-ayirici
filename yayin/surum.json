@@ -1,21 +1,21 @@
 {
-  "surum": "1.4.0",
-  "notlar": "Hedef yuz dogrulamasi: kalabalik karelerde yandaki kisinin ismi yapistirilmiyor; guven esigi 95",
+  "surum": "1.5.1",
+  "notlar": "kutuphane.py dagitim listesine eklendi",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "62451b5f89fbf28fb0977d87190b88d3fcceec8fc44ee5c2d74ba4c30eaf0a7f"
+      "sha256": "b575bf772403155269412f74b212778fc3551762be8ee2f4447978d2104332c2"
     },
     {
-      "ad": "tanima.py",
-      "url": "tanima.py",
-      "sha256": "551e4e5d7cfb9b0ed4ab216abd663b5bb77cc900f92f274b442cf8fab28ba9a1"
+      "ad": "kutuphane.py",
+      "url": "kutuphane.py",
+      "sha256": "7e2e1bc6b763b4fee8651835952a7096729f746702bbf28ccde348197926e21a"
     },
     {
       "ad": "baslat.py",
       "url": "baslat.py",
-      "sha256": "523ac27e7b8f46fea4fa8822297aa9abad69f6a26a91f5bea8704f55aed23454"
+      "sha256": "44d8d704cf7659acea654c67fdad3bc8a05e7ed8657ed02ad0a4cf2649c68d67"
     },
     {
       "ad": "guncelle.py",
@@ -30,7 +30,7 @@
     {
       "ad": "gereksinimler.txt",
       "url": "gereksinimler.txt",
-      "sha256": "a97e3f37c323cb4553b2cd6d449d164e0f87385f20f9dcd793b46ab0465e1160"
+      "sha256": "d309498a2b2458a7cfd38617de696a691aed2ed1e66d69eaa412bb4271dd7c58"
     }
   ]
 }

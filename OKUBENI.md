@@ -98,52 +98,35 @@ Dosya sistemi adı bilgi amaçlı ayrıca okunur (Windows'ta `GetVolumeInformati
 Yazmadan önce özet ekranı + onay gelir; `--evet` ile otomasyonda atlanır, `--dry-run` hiç yazmaz.
 Disk alanı yetmiyorsa işlem hiç başlamaz.
 
-## İsim önerme (v1.3.0) — neden Google değil, AWS
+## İsim hafızası — kişi kütüphanesi (v1.5.0)
 
-**Google Vision `web detection` denendi ve elendi.** Gerçek fotoğraflarla test edildi:
-o yöntem gönderdiğin **görseli** internette arar, **yüzü** tanımaz. Kardeşinin
-yayınlanmamış kareleri için dönen sonuç: `bestGuessLabels: ['human']`,
-tam eşleşen görsel 0, eşleşen sayfa 0. Dar/geniş kırpma fark etmedi.
-Google'ın ayrı **Celebrity Recognition** özelliği ise 16 Eylül 2025'te kaldırıldı.
+Bulut tabanlı tanıma **kaldırıldı** (`tanima.py` silindi, boto3 bağımlılığı çıktı).
+Yerine tamamen yerel, öğrenen bir sistem geldi: `kutuphane.py` + `kisi_kutuphanesi.db`.
 
-**AWS Rekognition `RecognizeCelebrities`** kullanılıyor: yüzü bir kişi veritabanıyla
-karşılaştırır, fotoğrafın daha önce yayınlanmış olması gerekmez.
+**Akış:** isimlendir → kütüphane öğrenir → sonraki işte otomatik tanır → yeni kişileri sorar.
+`onayla` ve `export` adımlarının sonunda kütüphane kendiliğinden güncellenir.
 
-Tasarım kararları:
-- **Kişi başına 3 kare**, tüm arşiv değil — 50 kişi ≈ 150 sorgu ≈ $0.15.
-- **Oy birliği**: bir isim için en az 2 karede aynı kişi + `MatchConfidence ≥ %85`.
-  Tek karede çıkan ya da kareler arası çelişen eşleşmeler reddedilir.
-- **Öneri ≠ isim**: `isimler.csv` içinde `onerilen_isim` ve `isim` ayrı sütunlar.
-  `export` sadece `isim` sütununu okur. Onaysız hiçbir klasör isimlenmez.
-- IMDb bağlantısı da saklanır (`oneriler.sayfalar`) — şüpheli öneriyi doğrulamak için.
-- Kimlik: env → `~/.aws/credentials` → `aws_anahtar.json` (gitignore'da).
-  IAM kullanıcısına `AmazonRekognitionReadOnlyAccess` yeterli.
+**Neden güvenilir — ölçülen değerler:**
 
-Test edildi (ağa çıkmadan, taklit cevaplarla): tutarlı+yüksek güvenli öneri kabul,
-tutarsız / eşik altı / tanınmayan reddedildi, öneri otomatik isme dönüşmedi.
-Türkçe karakterli isimler konsola sorunsuz basıldı.
+| | benzerlik |
+|---|---|
+| Aynı kişinin yüzleri arası | ~0.75 (küme içi) |
+| Farklı kişiler arası | ~0.08 (en yüksek 0.19) |
+| Eşik | **0.45** |
 
-**Henüz bilinmiyor:** AWS'in kişi veritabanının Türk dizi oyuncularını ne kadar
-kapsadığı. `isimlendir --limit 3` ile küçük bir denemeyle ölçülmeli.
+Arada çok geniş bir boşluk var, bu yüzden eşik güvenli. Ayrıca birinci aday ikinciyi
+en az `0.06` geçmeli (`--fark`); iki kişiye birden benziyorsa program isim vermez.
 
-### Gerçek veriyle ölçüm (296 fotoğraf, 11 kişi)
+**İki bölüm simülasyonuyla test edildi** (296 fotoğraf ikiye bölündü, her yarı ayrı
+kümelendi — küme numaraları farklı, eşleşme yalnızca yüzlere dayandı):
 
-| küme | öneri | güven | oy |
-|---|---|---|---|
-| 1 | Burak Hakkı | %99.7 | 3/3 |
-| 7 | Troy Glaus *(yanlış — Amerikalı beyzbolcu)* | %87.2 | 2/3 |
-| diğer 9 | tanınmadı | — | — |
+- Tüm kişiler öğretildiğinde: **10/10 doğru**, benzerlikler 0.95–0.99, 0 yanlış
+- Yalnızca 5 kişi öğretildiğinde: **5/5 doğru tanındı, 5/5 doğru şekilde "yeni kişi"**, 0 yanlış
 
-İki ders çıktı:
+Kişi başına en fazla 80 örnek saklanır; sınır aşılınca açgözlü *en-uzak-nokta* seçimiyle
+en **çeşitli** örnekler tutulur (farklı açı/ışık), böylece tanıma zamanla iyileşir.
 
-**1. AWS Türk oyuncularını biliyor.** Kapsama tam değil (11 kişiden 1'i), ama çalışıyor.
-
-**2. Kalabalık karelerde kırpma tuzağı var — düzeltildi.** Geniş kırpma yandaki kişinin
-yüzünü de içine alıyordu ve AWS *onu* tanıyıp hedef kişiye yapıştırıyordu. Küme 2'de
-"Burak Hakkı" kırpmanın sol kenarında (`Left=-0.00`) bulunmuştu; ortadaki asıl yüz ise
-tanınmamıştı. Artık `yuz_kirp_jpeg` hedef yüzün kırpma içindeki kutusunu da döndürüyor,
-AWS'in verdiği kutuyla IoU karşılaştırılıyor (`--ortusme`, varsayılan 0.35) ve
-örtüşmeyen eşleşmeler eleniyor. Düzeltmeden sonra küme 2 doğru şekilde "tanınmadı" oldu.
-
-**Eşik `--esik` varsayılanı 95** yapıldı: doğru eşleşme %99.7, yanlış eşleşme %87.2 geldi.
-Bu iki veri noktasına dayanıyor — daha çok veri gelince gözden geçirilmeli.
+**Bilinen sınır:** test aynı çekimin iki yarısıyla yapıldı (aynı gün, aynı ışık, aynı kıyafet).
+Farklı bölüm/sezonda saç-sakal-ışık değişince benzerlik düşer. ArcFace bu değişimlere
+dayanıklıdır ama gerçek ikinci bölüm geldiğinde `--esik` gözden geçirilmeli.
+Kütüphane her onaydan sonra yeni örneklerle zenginleştiği için bu sorun kendiliğinden azalır.
