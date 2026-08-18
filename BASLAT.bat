@@ -4,5 +4,5 @@ title Yuz Ayirici
 cd /d "%~dp0"
 set "PY=py -3"
 if exist python_yolu.txt set /p PY=<python_yolu.txt
-%PY% arayuz.py
+%PY% pencere.py
 if errorlevel 1 pause

@@ -1,26 +1,31 @@
 {
-  "surum": "1.14.0",
-  "notlar": "Rapor ve arama, kutuphane yedekleme/tasima, macOS baslaticisi",
+  "surum": "1.15.0",
+  "notlar": "Program artik kendi masaustu penceresinde aciliyor (tarayici yok) + gorsel yenileme",
   "dosyalar": [
     {
       "ad": "kur.py",
       "url": "kur.py",
-      "sha256": "30fa57ece470209be888569faaa573a61e18d336b3a7e1db65cf7b69bc9ec184"
+      "sha256": "0bd9ab920491136aa1674430f1f0c1cc3375b73a000306f60ca76970c9addc02"
     },
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "97ce677e56fd65c08128fc06101a8b22ab63d0c3d4bc002fed1d135f9bb29f7e"
+      "sha256": "c054dead3b6c12a4854a2bab21141ceb795c98f8640e21589b6ec59534a13410"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "f57f947b26c288e8ea85c623d1dd17f7af8ebdce14106280aad28f8c393b73fe"
+      "sha256": "95223bfa9cbc3dc175fc990641a7b4ab42f9f5cad25e176db8d6e84b7c816e09"
+    },
+    {
+      "ad": "pencere.py",
+      "url": "pencere.py",
+      "sha256": "ba4b8de30d8f7a13146ef44f110aa0c90588b57b21b9c696d198cdb335556cbc"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "7303ef1078095dc2bdf2520133fb68e224329fb14b843d3e4875c6b45f7de32b"
+      "sha256": "c55a01c2a5f0e874b85f87414877da3d39c542e9a64513cede44bb2a2504f1ec"
     },
     {
       "ad": "kutuphane.py",
@@ -55,7 +60,7 @@
     {
       "ad": "gereksinimler.txt",
       "url": "gereksinimler.txt",
-      "sha256": "dd96d30a75e707022d39b3a873c598edb24df566bef1155b24b6723c0c3aab52"
+      "sha256": "bee1a91d82dfba811472f1cdb044e15c21caf27c658d8438507678c3d235b977"
     }
   ]
 }

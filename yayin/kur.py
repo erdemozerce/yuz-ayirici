@@ -60,7 +60,7 @@ def mac_baslatici():
         betik.write_text(
             "#!/bin/bash\n"
             'cd "$(dirname "$0")"\n'
-            '"%s" arayuz.py\n' % sys.executable,
+            '"%s" pencere.py\n' % sys.executable,
             encoding="utf-8")
         os.chmod(betik, 0o755)
         masaustu = Path(os.path.expanduser("~/Desktop"))
@@ -90,7 +90,7 @@ def kisayol_olustur():
             masaustu = Path(os.environ.get("USERPROFILE", "")) / "Desktop"
         lnk = masaustu / "Yuz Ayirici.lnk"
         hedef = sys.executable                      # python.exe - imzali
-        betik = str(BASE / "arayuz.py")
+        betik = str(BASE / "pencere.py")
         ps = (
             "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');"
             "$s.TargetPath='%s';"
@@ -173,7 +173,7 @@ def main():
         print("  (Ilk acilista macOS izin sorabilir: Sag tik > Ac > Ac)")
     else:
         print("  Kisayol olusturulamadi. Programi su komutla acabilirsiniz:")
-        print('     py -3 "%s"' % (BASE / "arayuz.py"))
+        print('     py -3 "%s"' % (BASE / "pencere.py"))
     print()
     print("  Kullanim kilavuzu: KARDESIM-ICIN.md")
     print()

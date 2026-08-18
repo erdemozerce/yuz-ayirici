@@ -543,57 +543,78 @@ def bos_port():
     return p
 
 
-def main():
+def sunucu_baslat():
+    """Yerel sunucuyu arka planda baslatir, (sunucu, adres) dondurur."""
     if not (BASE / "arayuz.html").exists():
-        print("arayuz.html bulunamadi.")
-        return 1
+        raise RuntimeError("arayuz.html bulunamadi.")
     port = bos_port()
     sunucu = ThreadingHTTPServer(("127.0.0.1", port), Vekil)
     threading.Thread(target=sunucu.serve_forever, daemon=True).start()
-    adres = "http://127.0.0.1:%d/?t=%s" % (port, ANAHTAR)
-    print("Yuz Ayirici arayuzu calisiyor.")
-    print("Tarayicida acilmadiysa su adresi yapistirin:")
-    print("   " + adres)
-    print()
-    print("Bu pencereyi KAPATMAYIN - program burada calisiyor.")
     threading.Thread(target=guncelleme_ara, daemon=True).start()
-    webbrowser.open(adres)
+    return sunucu, "http://127.0.0.1:%d/?t=%s" % (port, ANAHTAR)
 
-    # tkinter pencereleri ANA is parcaciginda acilmali
+
+def klasor_dialogu(baslik, mevcut):
+    """
+    Klasor secme penceresi (tkinter). Pencere modunda bunun yerine
+    isletim sisteminin kendi dialogu kullanilir - pencere.py devralir.
+    """
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        kok = tk.Tk()
+        kok.withdraw()
+        kok.attributes("-topmost", True)
+        kok.update_idletasks()
+        kok.deiconify()
+        kok.geometry("1x1+0+0")
+        kok.lift()
+        try:
+            kok.focus_force()
+        except Exception:
+            pass
+        kok.withdraw()
+        secim = filedialog.askdirectory(
+            title=baslik, initialdir=mevcut or str(Path.home()), parent=kok)
+        try:
+            kok.destroy()
+        except Exception:
+            pass
+        return str(Path(secim)) if secim else ""
+    except Exception as e:
+        print("Klasor penceresi acilamadi:", e)
+        return None
+
+
+def dialog_dongusu(isleyici=None):
+    """Kuyruga gelen klasor isteklerini karsilar (ANA is parcaciginda calismali)."""
+    isleyici = isleyici or klasor_dialogu
     while True:
         try:
             baslik, mevcut, cevap = dialog_kuyrugu.get(timeout=0.5)
         except queue.Empty:
             continue
-        yol = ""
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-            kok = tk.Tk()
-            kok.withdraw()
-            # Pencere tarayicinin ARKASINDA kalmasin: gorunur yap, one al, odagi zorla
-            kok.attributes("-topmost", True)
-            kok.update_idletasks()
-            kok.deiconify()
-            kok.geometry("1x1+0+0")
-            kok.lift()
-            try:
-                kok.focus_force()
-            except Exception:
-                pass
-            kok.withdraw()
-            secim = filedialog.askdirectory(
-                title=baslik, initialdir=mevcut or str(Path.home()), parent=kok)
-            try:
-                kok.destroy()
-            except Exception:
-                pass
-            if secim:
-                yol = str(Path(secim))
-        except Exception as _e:
-            print("Klasor penceresi acilamadi:", _e)
-            yol = None            # arayuz elle giris istesin
-        cevap.put(yol)
+            cevap.put(isleyici(baslik, mevcut))
+        except Exception:
+            cevap.put(None)
+
+
+def main():
+    try:
+        sunucu, adres = sunucu_baslat()
+    except RuntimeError as e:
+        print(e)
+        return 1
+    print("Yuz Ayirici arayuzu calisiyor.")
+    print("Tarayicida acilmadiysa su adresi yapistirin:")
+    print("   " + adres)
+    print()
+    print("Bu pencereyi KAPATMAYIN - program burada calisiyor.")
+    webbrowser.open(adres)
+
+    # klasor pencereleri ANA is parcaciginda acilmali
+    dialog_dongusu()
 
 
 if __name__ == "__main__":

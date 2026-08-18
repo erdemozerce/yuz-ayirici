@@ -423,3 +423,28 @@ yüklenen kütüphane iki kişiyi de tanıdı.
 
 **Not:** macOS'ta test edilmedi (elimizde Mac yok). Kod platform ayrımlarını
 yapıyor ama gerçek makinede denenmeli.
+
+## Masaüstü penceresi + görsel yenileme (v1.15.0)
+
+**`pencere.py`** — arayüz artık tarayıcıda değil, **gerçek bir uygulama penceresinde**
+açılıyor. `pywebview` ile işletim sisteminin kendi görüntüleme bileşeni kullanılıyor:
+Windows'ta Edge WebView2 (Win11'de yerleşik, sürüm 151 doğrulandı), macOS'ta WKWebView.
+Adres çubuğu, sekme, yer imi yok; kendi görev çubuğu girişi var.
+
+Mimari değişmedi: yerel sunucu aynı, internet yok. `arayuz.py` iki parçaya ayrıldı —
+`sunucu_baslat()` (arka planda) ve `dialog_dongusu(isleyici)` (ana iş parçacığı).
+Pencere modunda klasör seçimi **işletim sisteminin kendi dialogu** ile açılıyor
+(`create_file_dialog`), uygulamaya bağlı olduğu için "tarayıcının arkasında kalma"
+sorunu ortadan kalkıyor.
+
+pywebview ya da WebView bileşeni yoksa program **kendini tarayıcı moduna düşürüyor**;
+hiçbir işlev kaybolmuyor. `BASLAT.bat`, `ARAYUZ.bat`, masaüstü kısayolu ve macOS
+`.command` dosyası artık `pencere.py`'yi açıyor.
+
+### Görsel yenileme
+
+Tüm id/sınıf adları korunarak yalnızca stil katmanı yenilendi (JavaScript'e dokunulmadı):
+yapışkan uygulama çubuğu, adım numaraları rozet olarak başlıklara gömüldü, daha derin
+renk paleti ve yumuşak gölgeler, tabular rakamlar, ilerlemede yüzde göstergesi,
+kart hover davranışları, daha büyük yüz küçük resimleri, gradyanlı seçim çubuğu,
+ince kaydırma çubuğu.

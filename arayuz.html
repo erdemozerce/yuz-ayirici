@@ -6,119 +6,172 @@
 <title>Yüz Ayırıcı</title>
 <style>
   :root{
-    --bg:#0f1115; --kart:#171a21; --kart2:#1e222b; --cizgi:#2a2f3a;
-    --yazi:#e8eaef; --soluk:#9aa3b2; --vurgu:#4f8cff; --vurgu2:#3a6fd8;
-    --yesil:#3ecf8e; --sari:#f0b429; --kirmizi:#f2555a;
-    --r:14px;
+    --bg:#0b0d12; --yuzey:#141821; --yuzey2:#1b2029; --cizgi:#262c38;
+    --yazi:#eef1f6; --soluk:#8f9aab; --vurgu:#5b8cff; --vurgu2:#4171e8;
+    --yesil:#37d399; --sari:#f5b942; --kirmizi:#f2555a;
+    --r:16px; --r2:11px;
+    --golge:0 1px 2px rgba(0,0,0,.28), 0 8px 24px rgba(0,0,0,.22);
   }
   @media (prefers-color-scheme: light){
-    :root{ --bg:#f4f6fa; --kart:#ffffff; --kart2:#eef1f6; --cizgi:#dde2ea;
-           --yazi:#161a20; --soluk:#5d6675; }
+    :root{ --bg:#f2f4f8; --yuzey:#ffffff; --yuzey2:#f5f7fb; --cizgi:#e2e7ef;
+           --yazi:#111620; --soluk:#5f6b7d;
+           --golge:0 1px 2px rgba(16,24,40,.05), 0 10px 28px rgba(16,24,40,.07); }
   }
   *{box-sizing:border-box}
+  html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--yazi);
-    font:15px/1.55 -apple-system,"Segoe UI",Roboto,system-ui,sans-serif;}
-  .sar{max-width:1080px;margin:0 auto;padding:28px 22px 70px}
+    font:14.5px/1.6 -apple-system,"Segoe UI Variable Text","Segoe UI",Roboto,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:var(--cizgi);border-radius:99px;
+    border:3px solid var(--bg)}
+  ::-webkit-scrollbar-track{background:transparent}
 
-  header{display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap}
-  .amblem{width:42px;height:42px;border-radius:12px;flex:none;
-    background:linear-gradient(135deg,var(--vurgu),#8b5cf6);
-    display:grid;place-items:center;font-size:21px}
-  h1{font-size:21px;margin:0;font-weight:650;letter-spacing:-.2px}
-  .altbaslik{color:var(--soluk);font-size:13px;margin-top:2px}
-  .rozet{margin-left:auto;background:var(--kart);border:1px solid var(--cizgi);
-    padding:7px 13px;border-radius:999px;font-size:12.5px;color:var(--soluk)}
+  /* ---- uygulama cubugu ---- */
+  .ustcubuk{position:sticky;top:0;z-index:20;background:var(--bg);
+    border-bottom:1px solid var(--cizgi);backdrop-filter:blur(8px)}
+  .ustcubuk .ic{max-width:1180px;margin:0 auto;padding:14px 26px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .amblem{width:38px;height:38px;border-radius:11px;flex:none;
+    background:linear-gradient(140deg,var(--vurgu),#9d6bff);
+    display:grid;place-items:center;font-size:19px;
+    box-shadow:0 4px 14px rgba(91,140,255,.35)}
+  h1{font-size:17px;margin:0;font-weight:640;letter-spacing:-.25px}
+  .altbaslik{color:var(--soluk);font-size:12.5px;margin-top:1px}
+  .rozet{background:var(--yuzey);border:1px solid var(--cizgi);
+    padding:6px 12px;border-radius:999px;font-size:12px;color:var(--soluk);
+    white-space:nowrap}
+  .rozet.calisiyor{color:var(--vurgu);border-color:var(--vurgu)}
+  .rozet:first-of-type{margin-left:auto}
 
-  .kartlar{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:24px}
-  .sayac{background:var(--kart);border:1px solid var(--cizgi);border-radius:var(--r);padding:15px 17px}
-  .sayac b{display:block;font-size:25px;font-weight:640;letter-spacing:-.5px}
-  .sayac span{color:var(--soluk);font-size:12.5px}
+  .sar{max-width:1180px;margin:0 auto;padding:24px 26px 80px}
 
-  .kart{background:var(--kart);border:1px solid var(--cizgi);border-radius:var(--r);
-    padding:20px 22px;margin-bottom:18px}
-  .kart h2{font-size:12px;text-transform:uppercase;letter-spacing:.9px;color:var(--soluk);
-    margin:0 0 15px;font-weight:600}
+  /* ---- sayaclar ---- */
+  .kartlar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;margin-bottom:26px}
+  .sayac{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:var(--r);
+    padding:16px 18px;box-shadow:var(--golge);transition:.15s}
+  .sayac:hover{transform:translateY(-1px)}
+  .sayac b{display:block;font-size:27px;font-weight:660;letter-spacing:-.8px;
+    line-height:1.15;font-variant-numeric:tabular-nums}
+  .sayac span{color:var(--soluk);font-size:12px;display:block;margin-top:3px}
 
-  .satir{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--cizgi)}
+  /* ---- bolumler ---- */
+  .kart{background:var(--yuzey);border:1px solid var(--cizgi);border-radius:var(--r);
+    padding:22px 24px;margin-bottom:16px;box-shadow:var(--golge)}
+  .kart h2{font-size:13.5px;letter-spacing:-.1px;color:var(--yazi);
+    margin:0 0 16px;font-weight:620;text-transform:none;
+    display:flex;align-items:center;gap:10px}
+  .kart h2::before{content:attr(data-adim);width:23px;height:23px;flex:none;
+    border-radius:7px;background:var(--vurgu);color:#fff;font-size:12px;
+    font-weight:700;display:grid;place-items:center}
+  .kart h2 span{font-weight:400;color:var(--soluk);font-size:12.5px}
+
+  .satir{display:flex;align-items:center;gap:12px;padding:10px 0;
+    border-bottom:1px solid var(--cizgi)}
   .satir:last-child{border-bottom:0}
-  .satir .etiket{width:118px;color:var(--soluk);font-size:13.5px;flex:none}
-  .satir .deger{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .satir .deger.bos{color:var(--soluk);font-style:italic;font-family:inherit;font-size:13.5px}
+  .satir .etiket{width:124px;color:var(--soluk);font-size:13px;flex:none}
+  .satir .deger{flex:1;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;
+    font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .satir .deger.bos{color:var(--soluk);font-style:italic;
+    font-family:inherit;font-size:13px}
 
-  button{font:inherit;border:0;border-radius:10px;padding:10px 17px;cursor:pointer;
-    background:var(--kart2);color:var(--yazi);border:1px solid var(--cizgi);
-    transition:.13s;font-size:13.5px;font-weight:500}
-  button:hover:not(:disabled){border-color:var(--vurgu);color:var(--vurgu)}
-  button:disabled{opacity:.42;cursor:not-allowed}
-  button.ana{background:var(--vurgu);border-color:var(--vurgu);color:#fff;font-weight:600}
-  button.ana:hover:not(:disabled){background:var(--vurgu2);border-color:var(--vurgu2);color:#fff}
-  button.buyuk{padding:14px 26px;font-size:15px;border-radius:12px}
+  /* ---- dugmeler ---- */
+  button{font:inherit;border-radius:var(--r2);padding:9px 16px;cursor:pointer;
+    background:var(--yuzey2);color:var(--yazi);border:1px solid var(--cizgi);
+    transition:.13s;font-size:13px;font-weight:520}
+  button:hover:not(:disabled){border-color:var(--vurgu);color:var(--vurgu);
+    transform:translateY(-1px)}
+  button:active:not(:disabled){transform:translateY(0)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.ana{background:var(--vurgu);border-color:var(--vurgu);color:#fff;font-weight:600;
+    box-shadow:0 3px 12px rgba(91,140,255,.3)}
+  button.ana:hover:not(:disabled){background:var(--vurgu2);border-color:var(--vurgu2);
+    color:#fff}
+  button.buyuk{padding:13px 28px;font-size:14.5px;border-radius:13px}
   button.tehlike:hover:not(:disabled){border-color:var(--kirmizi);color:var(--kirmizi)}
-  .dugmeler{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .dugmeler{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+  input,select{font:inherit;padding:9px 12px;border-radius:var(--r2);
+    border:1px solid var(--cizgi);background:var(--yuzey2);color:var(--yazi);
+    font-size:13px;transition:.13s}
+  input:focus,select:focus{outline:0;border-color:var(--vurgu);
+    box-shadow:0 0 0 3px rgba(91,140,255,.15)}
 
-  .cubuk{height:9px;background:var(--kart2);border-radius:99px;overflow:hidden;margin:14px 0 10px}
-  .cubuk i{display:block;height:100%;background:linear-gradient(90deg,var(--vurgu),#8b5cf6);
-    width:0;transition:width .4s}
-  .ilerleme-bilgi{display:flex;justify-content:space-between;font-size:13px;color:var(--soluk);
-    flex-wrap:wrap;gap:8px}
-  pre.gunluk{background:var(--bg);border:1px solid var(--cizgi);border-radius:10px;
-    padding:12px 14px;font-size:11.5px;line-height:1.6;max-height:190px;overflow:auto;margin:14px 0 0;
-    color:var(--soluk);white-space:pre-wrap;word-break:break-word}
+  /* ---- ilerleme ---- */
+  .cubuk{height:8px;background:var(--yuzey2);border-radius:99px;overflow:hidden;
+    margin:16px 0 10px;border:1px solid var(--cizgi)}
+  .cubuk i{display:block;height:100%;border-radius:99px;
+    background:linear-gradient(90deg,var(--vurgu),#9d6bff);width:0;
+    transition:width .45s cubic-bezier(.4,0,.2,1)}
+  .ilerleme-bilgi{display:flex;justify-content:space-between;font-size:12.5px;
+    color:var(--soluk);flex-wrap:wrap;gap:8px;font-variant-numeric:tabular-nums}
+  pre.gunluk{background:var(--bg);border:1px solid var(--cizgi);border-radius:var(--r2);
+    padding:12px 14px;font:11.5px/1.65 ui-monospace,"Cascadia Mono",Consolas,monospace;
+    max-height:180px;overflow:auto;margin:14px 0 0;color:var(--soluk);
+    white-space:pre-wrap;word-break:break-word}
 
-  .kisiler{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
-  .kisi{background:var(--kart2);border:1px solid var(--cizgi);border-radius:12px;padding:13px;
-    transition:.13s}
-  .kisi:hover{border-color:var(--vurgu)}
-  .kisi .yuzler{display:flex;gap:5px;margin-bottom:11px;overflow:hidden}
+  /* ---- kisi kartlari ---- */
+  .kisiler{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .kisi{background:var(--yuzey2);border:1px solid var(--cizgi);border-radius:var(--r);
+    padding:14px;transition:.15s}
+  .kisi:hover{border-color:var(--vurgu);transform:translateY(-2px);
+    box-shadow:0 8px 22px rgba(0,0,0,.16)}
+  .kisi.secili{border-color:var(--vurgu);box-shadow:0 0 0 2px rgba(91,140,255,.35)}
+  .kisi .yuzler{display:flex;gap:5px;margin-bottom:12px;overflow:hidden}
   .kisi .yuzler img{cursor:pointer;transition:.12s}
-  .kisi .yuzler img:hover{outline:2px solid var(--kirmizi);outline-offset:1px;opacity:.75}
-  .kisi.secili{border-color:var(--vurgu);box-shadow:0 0 0 1px var(--vurgu)}
-  .kisi .araclar{display:flex;gap:6px;margin-top:9px;align-items:center}
-  .kisi .araclar button{padding:4px 10px;font-size:11.5px;border-radius:7px}
-  .kisi .sec{margin-right:2px;accent-color:var(--vurgu);width:15px;height:15px;cursor:pointer}
-  #birlestir-cubugu{position:sticky;bottom:14px;z-index:5;background:var(--vurgu);
-    color:#fff;border-radius:12px;padding:12px 16px;display:flex;align-items:center;
-    gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);margin-top:14px}
-  #birlestir-cubugu button{background:rgba(255,255,255,.16);border-color:transparent;color:#fff}
-  #birlestir-cubugu button:hover{background:rgba(255,255,255,.28);color:#fff}
-  .kisi img{width:100%;max-width:62px;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
-  .kisi .ust{display:flex;align-items:center;gap:8px;margin-bottom:9px}
-  .kisi .no{font-size:11.5px;color:var(--soluk);font-family:ui-monospace,Consolas,monospace}
+  .kisi .yuzler img:hover{outline:2px solid var(--kirmizi);outline-offset:2px;opacity:.7}
+  .kisi img{width:100%;max-width:66px;aspect-ratio:1;object-fit:cover;
+    border-radius:10px;display:block}
+  .kisi .ust{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .kisi .no{font-size:11px;color:var(--soluk);
+    font-family:ui-monospace,Consolas,monospace}
   .kisi .adet{margin-left:auto;font-size:11.5px;color:var(--soluk)}
-  .kisi input{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--cizgi);
-    background:var(--kart);color:var(--yazi);font:inherit;font-size:13.5px}
-  .kisi input:focus{outline:0;border-color:var(--vurgu)}
-  .oneri{font-size:12px;margin-top:8px;color:var(--soluk);display:flex;align-items:center;gap:7px;
-    flex-wrap:wrap}
-  .etiketcik{background:rgba(62,207,142,.14);color:var(--yesil);padding:2.5px 8px;border-radius:999px;
-    font-size:11px;font-weight:600}
-  .etiketcik.yeni{background:rgba(240,180,41,.14);color:var(--sari)}
-  .oneri button{padding:3px 9px;font-size:11.5px;border-radius:7px}
-  .kaydedildi{color:var(--yesil);font-size:11.5px}
+  .kisi input{width:100%;font-size:13.5px}
+  .kisi .araclar{display:flex;gap:6px;margin-top:10px;align-items:center}
+  .kisi .araclar button{padding:4px 11px;font-size:11.5px;border-radius:8px}
+  .kisi .sec{margin-right:1px;accent-color:var(--vurgu);width:16px;height:16px;
+    cursor:pointer;flex:none}
 
-  .bos-durum{text-align:center;padding:44px 20px;color:var(--soluk)}
-  .bos-durum .ikon{font-size:38px;margin-bottom:12px;opacity:.55}
-  .ipucu{font-size:12.5px;color:var(--soluk);margin-top:12px;line-height:1.6}
+  #birlestir-cubugu{position:sticky;bottom:16px;z-index:10;
+    background:linear-gradient(135deg,var(--vurgu),#7a5cf0);
+    color:#fff;border-radius:14px;padding:13px 17px;display:flex;align-items:center;
+    gap:11px;box-shadow:0 10px 30px rgba(91,140,255,.4);margin-top:16px;flex-wrap:wrap}
+  #birlestir-cubugu button{background:rgba(255,255,255,.18);border-color:transparent;
+    color:#fff;font-weight:560}
+  #birlestir-cubugu button:hover:not(:disabled){background:rgba(255,255,255,.3);color:#fff}
+
+  .oneri{font-size:12px;margin-top:9px;color:var(--soluk);display:flex;
+    align-items:center;gap:7px;flex-wrap:wrap}
+  .etiketcik{background:rgba(55,211,153,.15);color:var(--yesil);padding:3px 9px;
+    border-radius:999px;font-size:11px;font-weight:640}
+  .etiketcik.yeni{background:rgba(245,185,66,.15);color:var(--sari)}
+  .oneri button{padding:3px 10px;font-size:11.5px;border-radius:8px}
+
+  .bos-durum{text-align:center;padding:52px 20px;color:var(--soluk)}
+  .bos-durum .ikon{font-size:42px;margin-bottom:14px;opacity:.5}
+  .ipucu{font-size:12.5px;color:var(--soluk);margin-top:14px;line-height:1.65;
+    padding-top:14px;border-top:1px solid var(--cizgi)}
   .gizli{display:none !important}
-  .uyari{background:rgba(242,85,90,.1);border:1px solid rgba(242,85,90,.35);color:var(--kirmizi);
-    padding:11px 14px;border-radius:10px;font-size:13.5px;margin-bottom:14px}
-  select{font:inherit;padding:8px 11px;border-radius:9px;border:1px solid var(--cizgi);
-    background:var(--kart2);color:var(--yazi);font-size:13.5px}
+  .uyari{background:rgba(242,85,90,.1);border:1px solid rgba(242,85,90,.35);
+    color:var(--kirmizi);padding:12px 15px;border-radius:var(--r2);font-size:13px;
+    margin-bottom:14px}
+  label{cursor:pointer}
 </style>
 </head>
 <body>
-<div class="sar">
-
-  <header>
+<div class="ustcubuk">
+  <div class="ic">
     <div class="amblem">🎞️</div>
     <div>
       <h1>Yüz Ayırıcı</h1>
-      <div class="altbaslik">Fotoğrafları kişilere göre klasörler — her şey bu bilgisayarda</div>
+      <div class="altbaslik">Fotoğrafları kişilere göre ayırır — her şey bu bilgisayarda</div>
     </div>
     <div class="rozet" id="rozet">hazır</div>
     <div class="rozet" id="surum-rozet" title="Programın sürümü">sürüm …</div>
-  </header>
+  </div>
+</div>
+
+<div class="sar">
 
   <div id="guncelleme" class="gizli" style="background:rgba(79,140,255,.12);
        border:1px solid var(--vurgu);color:var(--yazi);padding:13px 16px;
@@ -148,7 +201,7 @@
   </div>
 
   <div class="kart">
-    <h2>1 · Klasörler</h2>
+    <h2 data-adim="1">Klasörler</h2>
     <div id="kaynak-liste"></div>
     <div class="satir">
       <div class="etiket">Fotoğraflar</div>
@@ -191,7 +244,7 @@
   </div>
 
   <div class="kart">
-    <h2>2 · Tarama</h2>
+    <h2 data-adim="2">Tarama</h2>
     <div class="dugmeler">
       <button class="ana buyuk" id="b-hepsi" onclick="hepsiniYap()">Hepsini Yap</button>
       <button id="b-deneme" onclick="denemeYap()">Deneme (300 fotoğraf)</button>
@@ -223,7 +276,7 @@
   </div>
 
   <div class="kart">
-    <h2>3 · Kişiler <span id="kisi-sayisi" style="color:var(--soluk);font-weight:400"></span></h2>
+    <h2 data-adim="3">Kişiler <span id="kisi-sayisi"></span></h2>
     <div id="secim-ipucu" class="gizli" style="background:var(--kart2);border:1px solid var(--cizgi);
          border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--soluk)">
       <b style="color:var(--yazi)">Herkesi işlemek zorunda değilsin.</b>
@@ -260,7 +313,7 @@
   </div>
 
   <div class="kart">
-    <h2>4a · İsimleri fotoğrafın içine yaz <span style="color:var(--yesil);font-weight:400">· kopya oluşturmaz</span></h2>
+    <h2 data-adim="4">İsimleri fotoğrafın içine yaz <span style="color:var(--yesil)">· kopya oluşturmaz</span></h2>
     <div class="satir">
       <div class="etiket">Yazım yeri</div>
       <div class="deger" style="font-family:inherit;font-size:13.5px">
@@ -285,7 +338,7 @@
   </div>
 
   <div class="kart">
-    <h2>4b · Klasörleme <span style="color:var(--soluk);font-weight:400">· kopya oluşturur</span></h2>
+    <h2 data-adim="5">Klasörleme <span>· kopya oluşturur</span></h2>
     <div class="dugmeler">
       <button id="b-onizle" onclick="baslat('onizleme')">Önce hesapla (hiçbir şey yazmaz)</button>
       <button class="ana" id="b-klasorle" onclick="klasorleOnayla()">Klasörleri Oluştur</button>
@@ -433,6 +486,7 @@ async function durumGuncelle(){
   }
   calisiyor = d.calisiyor;
   $("#rozet").textContent = calisiyor ? d.adim + "…" : "hazır";
+  $("#rozet").classList.toggle("calisiyor", calisiyor);
   $("#ilerleme-kutu").classList.toggle("gizli", !calisiyor && !d.satirlar.length);
   $("#b-durdur").classList.toggle("gizli", !calisiyor);
   ["b-hepsi","b-deneme","b-grupla","b-tani","b-klasorle","b-onizle","b-etiket","b-etiket-deneme"]
@@ -442,7 +496,7 @@ async function durumGuncelle(){
   if(d.toplam){
     const y = Math.round(d.yapilan / d.toplam * 100);
     $("#cubuk").style.width = y + "%";
-    $("#i-sayi").textContent = d.yapilan.toLocaleString("tr") + " / " +
+    $("#i-sayi").textContent = "%" + y + "  ·  " + d.yapilan.toLocaleString("tr") + " / " +
       d.toplam.toLocaleString("tr") + "  ·  " + d.hiz.toFixed(1) + " foto/sn";
     $("#i-kalan").textContent = d.kalan ? "kalan " + d.kalan : "";
   }else{

@@ -60,10 +60,11 @@ yolu kopyala (Ctrl+C), kutuya yapıştır (Ctrl+V), **Ekle**'ye bas.
 
 
 
-Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Tarayıcıda bir panel açılır.
+Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Program **kendi penceresinde**
+açılır — tarayıcı açılmaz, adres çubuğu yoktur, normal bir uygulama gibi çalışır.
 
 > Arkada küçük siyah bir pencere kalır — **onu kapatma**, program orada çalışıyor.
-> İşin bitince kapatabilirsin.
+> İşin bitince ikisini de kapatabilirsin.
 
 Panelde dört bölüm var:
 

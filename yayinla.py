@@ -32,6 +32,7 @@ DOSYALAR = [
     "kur.py",
     "face_sorter.py",
     "arayuz.py",
+    "pencere.py",
     "arayuz.html",
     "kutuphane.py",
     "etiket.py",

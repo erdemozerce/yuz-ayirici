@@ -7,3 +7,4 @@ pillow-heif
 insightface
 pyexiv2
 rawpy
+pywebview
