@@ -312,6 +312,69 @@ def rapor_verisi():
         return {}
 
 
+def _kare_kisi(con):
+    d = {}
+    for cid, p in con.execute(
+            "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+        d.setdefault(p, set()).add(cid)
+    return d
+
+
+def arama_yap(kumeler, herhangi=False, sinir=400):
+    """
+    Secilen kisilerin birlikte (ya da herhangi biri) gorundugu kareler.
+    Sonuc KLASORE GORE gruplanir; kucuk resim uretilmez - aninda doner.
+    """
+    yol = Path(db_yolu())
+    if not yol.exists() or not kumeler:
+        return {"adet": 0, "yollar": [], "gruplar": []}
+    con = sqlite3.connect(str(yol))
+    con.executescript(motor.DB_SCHEMA)
+    istenen = set(int(k) for k in kumeler)
+    kk = _kare_kisi(con)
+
+    bulunan = ([p for p, s in kk.items() if s & istenen] if herhangi
+               else [p for p, s in kk.items() if istenen <= s])
+    bulunan.sort()
+
+    elenen, veto = set(), set()
+    try:
+        elenen = {r[0] for r in con.execute("SELECT path FROM secki WHERE bayrak != ''")}
+    except Exception:
+        pass
+    try:
+        veto = {r[0] for r in con.execute("SELECT path FROM onay WHERE durum='red'")}
+    except Exception:
+        pass
+    con.close()
+
+    gruplar = {}
+    for p in bulunan:
+        gruplar.setdefault(os.path.dirname(p), []).append(p)
+
+    cikti = []
+    kalan = sinir
+    for klasor in sorted(gruplar):
+        dosyalar = gruplar[klasor]
+        gosterilen = dosyalar[:max(kalan, 0)]
+        kalan -= len(gosterilen)
+        cikti.append({
+            "klasor": klasor,
+            "adet": len(dosyalar),
+            "dosyalar": [{"ad": os.path.basename(p),
+                          "isaretli": p in elenen,
+                          "vetolu": p in veto} for p in gosterilen],
+            "kirpildi": len(dosyalar) - len(gosterilen),
+        })
+        if kalan <= 0:
+            break
+
+    return {"adet": len(bulunan), "yollar": bulunan, "gruplar": cikti,
+            "klasor_sayisi": len(gruplar),
+            "isaretli": len([p for p in bulunan if p in elenen]),
+            "vetolu": len([p for p in bulunan if p in veto])}
+
+
 def kisiler_listesi(adet=5):
     yol = Path(db_yolu())
     if not yol.exists():
@@ -458,6 +521,18 @@ class Vekil(BaseHTTPRequestHandler):
                     ayar_yaz(cfg)
                 return self._json({"ok": True})
 
+            if tip == "serbest":
+                cevap = queue.Queue()
+                dialog_kuyrugu.put(("Kaydedilecek klasoru secin",
+                                    veri.get("baslangic") or "", cevap))
+                try:
+                    yol = cevap.get(timeout=300)
+                except queue.Empty:
+                    return self._json({"hata": "Klasor penceresi acilamadi"}, 500)
+                if yol is None:
+                    return self._json({"hata": "Klasor penceresi calismiyor"}, 500)
+                return self._json({"yol": yol})
+
             hedef_mi = (tip == "hedef")
 
             # Kullanici yolu elle yapistirdiysa pencere acmaya gerek yok
@@ -507,6 +582,90 @@ class Vekil(BaseHTTPRequestHandler):
         if u.path == "/api/isim":
             isim_kaydet(veri.get("kume"), veri.get("isim", ""))
             return self._json({"ok": True})
+
+        if u.path == "/api/ara":
+            sonuc = arama_yap(veri.get("kumeler") or [], bool(veri.get("herhangi")))
+            Vekil.son_arama = sonuc["yollar"]
+            return self._json({k: v for k, v in sonuc.items() if k != "yollar"})
+
+        if u.path == "/api/ara-eylem":
+            yollar = list(getattr(Vekil, "son_arama", []) or [])
+            if not yollar:
+                return self._json({"hata": "Once arama yapin"}, 400)
+            islem = veri.get("islem")
+            if islem == "liste":
+                bicim = (veri.get("bicim") or "txt-tam").lower()
+                klasor = (veri.get("klasor") or "").strip() or str(BASE)
+                if not os.path.isdir(klasor):
+                    return self._json({"hata": "Klasor bulunamadi: %s" % klasor}, 400)
+                uzanti = ".csv" if bicim.startswith("csv") else ".txt"
+                ad = (veri.get("ad") or "").strip() or ("arama-sonucu-" +
+                                                        time.strftime("%Y%m%d-%H%M"))
+                for kotu in '<>:"/\\|?*':
+                    ad = ad.replace(kotu, "_")
+                if not ad.lower().endswith(uzanti):
+                    ad += uzanti
+                hedef = Path(klasor) / ad
+
+                if bicim == "txt-ad":
+                    icerik = "\n".join(os.path.basename(p) for p in yollar)
+                elif bicim.startswith("csv"):
+                    import csv as _csv
+                    import io as _io
+                    con = sqlite3.connect(db_yolu())
+                    con.executescript(motor.DB_SCHEMA)
+                    isimler = motor.isim_csv_oku(BASE / "isimler.csv")
+                    kk = _kare_kisi(con)
+                    try:
+                        elenen = {r[0] for r in con.execute(
+                            "SELECT path FROM secki WHERE bayrak != ''")}
+                    except Exception:
+                        elenen = set()
+                    try:
+                        veto = {r[0] for r in con.execute(
+                            "SELECT path FROM onay WHERE durum='red'")}
+                    except Exception:
+                        veto = set()
+                    con.close()
+                    tampon = _io.StringIO()
+                    w = _csv.writer(tampon, delimiter=";", lineterminator="\n")
+                    w.writerow(["klasor", "dosya", "kisiler", "durum", "tam_yol"])
+                    for p in yollar:
+                        kisi = ", ".join(sorted(
+                            isimler.get(c) or ("kisi_%04d" % c) for c in kk.get(p, [])))
+                        durum = "vetolu" if p in veto else ("elenmis" if p in elenen else "")
+                        w.writerow([os.path.dirname(p), os.path.basename(p), kisi, durum, p])
+                    icerik = tampon.getvalue()
+                else:
+                    icerik = "\n".join(yollar)
+
+                try:
+                    # CSV Excel'de dogru acilsin diye BOM ile
+                    kodlama = "utf-8-sig" if bicim.startswith("csv") else "utf-8"
+                    hedef.write_text(icerik, encoding=kodlama)
+                except OSError as e:
+                    return self._json({"hata": "Yazilamadi: %s" % e}, 400)
+                return self._json({"ok": True, "yol": str(hedef),
+                                   "mesaj": "%d kare yazildi: %s" % (len(yollar), hedef.name)})
+            if islem == "teslim":
+                hedef = veri.get("hedef") or str(BASE / "teslim-arama")
+                liste = BASE / ".arama-listesi.txt"
+                liste.write_text("\n".join(yollar), encoding="utf-8")
+                return self._json({"ok": is_calistir("Teslim paketi", [
+                    "teslim", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"),
+                    "--dst", hedef, "--dosya-listesi", str(liste),
+                    "--boyut", str(veri.get("boyut", 2048)), "--evet"])})
+            if islem == "klasorle":
+                if not cfg.get("hedef_klasor"):
+                    return self._json({"hata": "Once cikti klasorunu secin"}, 400)
+                liste = BASE / ".arama-listesi.txt"
+                liste.write_text("\n".join(yollar), encoding="utf-8")
+                return self._json({"ok": is_calistir("Klasorler olusturuluyor", [
+                    "export", "--db", cfg["db"], "--dst", cfg["hedef_klasor"],
+                    "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"],
+                    "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"],
+                    "--dosya-listesi", str(liste), "--evet"])})
+            return self._json({"hata": "bilinmeyen islem"}, 400)
 
         if u.path == "/api/kutuphane-islem":
             try:
@@ -636,7 +795,9 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json({"hata": "bilinmeyen adim"}, 400)
 
         if u.path == "/api/klasor-ac":
-            hedef = cfg.get("hedef_klasor")
+            hedef = (veri.get("yol") or "").strip() or cfg.get("hedef_klasor")
+            if hedef and os.path.isfile(hedef):
+                hedef = os.path.dirname(hedef)
             if hedef and Path(hedef).exists():
                 try:
                     if os.name == "nt":

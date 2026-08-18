@@ -513,3 +513,36 @@ Renk sol kenardan veriliyor (yeşil/kırmızı/sarı), tıklayınca kapanıyor, 
 **Neden:** kısa mesajlar sayfanın *en üstündeki* şeritte çıkıyordu; kullanıcı aşağıda
 çalışırken hiç görmüyordu. Bu, projedeki dördüncü "işlem çalışıyor ama geri bildirim
 kullanıcının baktığı yerde değil" hatasıydı — artık ikisi de yapısal olarak çözüldü.
+
+## Arama sayfası (v1.19.0)
+
+Sol menüye **Arama** eklendi: kişilere çip olarak tıklanıyor, program o kişilerin
+**hepsinin aynı karede** (ya da "herhangi biri") göründüğü fotoğrafları buluyor.
+İki kişi de olur, üç kişi de — sınır yok.
+
+Sonuç **klasöre göre gruplanmış liste**: klasör yolu + içindeki dosya adları.
+Başlığa tıklayınca açılıp kapanıyor. Seçkide elenmiş kareler sarı, vetolular üstü
+çizili gösteriliyor. Küçük resim üretilmiyor — arama **0.03 saniyede** dönüyor
+(296 fotoğraflık sette ölçüldü).
+
+Sonuca uygulanabilecek işlemler: *Bu kareleri klasörle*, *Teslim paketi yap*,
+*Listeyi dosyaya kaydet*. İlk ikisi `export`/`teslim` komutlarına yeni eklenen
+`--dosya-listesi` süzgeciyle çalışıyor — yalnızca bulunan kareleri işliyor.
+
+### Listeyi kaydetme seçenekleri
+
+Klasör (gözat düğmesiyle), dosya adı ve biçim seçilebiliyor:
+
+| Biçim | İçerik |
+|---|---|
+| **CSV** | `klasor; dosya; kisiler; durum; tam_yol` — Excel'de açılır (BOM'lu UTF-8) |
+| **TXT tam yol** | Her satır bir tam dosya yolu |
+| **TXT dosya adı** | Yalnızca dosya adları |
+
+Kaydedince sonuç penceresi tam yolu gösteriyor ve **Klasörü aç** düğmesi sunuyor.
+
+### Yarış durumu düzeltildi
+
+Çipe arka arkaya tıklandığında önceki aramanın geç gelen cevabı yenisinin üstüne
+yazıyordu (2 kişi seçiliyken 126 yerine 102 görünmesi gerekirken 126 kalıyordu).
+Her isteğe sıra numarası verildi; eski cevap geldiğinde atılıyor.

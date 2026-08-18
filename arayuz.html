@@ -255,6 +255,40 @@
     font-variant-numeric:tabular-nums}
   .tablo tr:last-child td{border-bottom:0}
   .tablo td.sayi{text-align:right;color:var(--soluk)}
+
+  /* ---- arama ---- */
+  .cipler{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px}
+  .cip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+    border:1px solid var(--cizgi);background:var(--yuzey2);cursor:pointer;
+    font-size:13px;transition:.13s;user-select:none}
+  .cip:hover{border-color:var(--vurgu)}
+  .cip.secili{background:var(--vurgu);border-color:var(--vurgu);color:#fff;font-weight:560}
+  .cip .sayi2{opacity:.65;font-size:11.5px}
+  .cip.secili .sayi2{opacity:.8}
+  .klasorgrup{border:1px solid var(--cizgi);border-radius:12px;margin-bottom:10px;
+    overflow:hidden;background:var(--yuzey2)}
+  .klasorgrup .basi{display:flex;align-items:center;gap:10px;padding:11px 14px;
+    background:var(--yuzey);border-bottom:1px solid var(--cizgi);cursor:pointer;
+    user-select:none}
+  .klasorgrup .basi:hover{color:var(--vurgu)}
+  .klasorgrup .yolad{flex:1;min-width:0;font-size:12.5px;
+    font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;
+    overflow-wrap:anywhere}
+  .klasorgrup .kac{font-size:11.5px;color:var(--soluk);white-space:nowrap}
+  .klasorgrup .ok{color:var(--soluk);font-size:11px;transition:.15s}
+  .klasorgrup.kapali .ok{transform:rotate(-90deg)}
+  .klasorgrup.kapali .dosyalar{display:none}
+  .dosyalar{padding:8px 14px 12px;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 14px}
+  .dosyalar div{font-size:12px;font-family:ui-monospace,Consolas,monospace;
+    color:var(--soluk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    padding:2px 0}
+  .dosyalar div.isaretli{color:var(--sari)}
+  .dosyalar div.vetolu{color:var(--kirmizi);text-decoration:line-through}
+  .sonuc-ozet{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:14px 16px;border-radius:12px;background:var(--yuzey2);
+    border:1px solid var(--cizgi);margin-bottom:14px}
+  .sonuc-ozet b{font-size:22px;font-weight:660;letter-spacing:-.5px}
 </style>
 </head>
 <body>
@@ -277,6 +311,8 @@
     <span class="ikon">▶</span> Çalışma</button>
   <button onclick="sayfaGec('kutuphane', this)">
     <span class="ikon">👤</span> Kişi kütüphanesi</button>
+  <button onclick="sayfaGec('arama', this)">
+    <span class="ikon">🔍</span> Arama</button>
   <button onclick="sayfaGec('rapor', this)">
     <span class="ikon">📊</span> Rapor</button>
 </nav>
@@ -495,6 +531,46 @@
       <div class="etiket">Toplanacak isim</div>
       <select id="kut-hedef" style="flex:1"></select>
       <button class="ana" onclick="kutBirlestir()">Birleştir</button>
+    </div>
+  </div>
+</section>
+
+<section id="sayfa-arama" class="gizli">
+  <div class="kart">
+    <h2 data-adim="🔍">Kimler aynı karede?</h2>
+    <div class="ipucu" style="border-top:0;padding-top:0;margin-top:0;margin-bottom:14px">
+      Aradığın kişilere tıkla. Program <b>hepsinin birlikte</b> göründüğü kareleri bulur —
+      iki kişi de olur, üç kişi de. Sonra o kareleri klasörleyebilir ya da
+      teslim paketine çıkarabilirsin.
+    </div>
+    <div id="arama-cipler" class="cipler"></div>
+    <div class="satir" style="border-bottom:0">
+      <div class="etiket">Kural</div>
+      <div class="deger" style="font-family:inherit;font-size:13.5px">
+        <select id="arama-kural" onchange="aramaYap()">
+          <option value="hepsi">Hepsi aynı karede olsun</option>
+          <option value="herhangi">Herhangi biri yeterli</option>
+        </select>
+      </div>
+      <button class="ana" onclick="aramaYap()">Ara</button>
+    </div>
+  </div>
+
+  <div class="kart gizli" id="arama-sonuc-kart">
+    <h2 data-adim="✓">Sonuç</h2>
+    <div id="arama-ozet"></div>
+    <div id="arama-liste"></div>
+    <div class="dugmeler">
+      <button onclick="aramaEylem('klasorle')">Bu kareleri klasörle</button>
+      <button onclick="aramaEylem('teslim')">Teslim paketi yap</button>
+      <button onclick="aramaEylem('liste')">Listeyi dosyaya kaydet</button>
+    </div>
+    <div class="ipucu">
+      Klasör başlığına tıklayınca dosya listesi açılıp kapanır. Sarı olanlar seçkide
+      elenmiş, üstü çizili olanlar vetolu karelerdir.<br><br>
+      <b>Bu kareleri klasörle</b> yalnızca bulunan kareleri işler — arşivin geri kalanına
+      dokunmaz. <b>Teslim paketi</b> küçültülmüş kopyalarını ve kontak baskısını üretir.
+      <b>Listeyi dosyaya kaydet</b> tam yolları bir metin dosyasına yazar.
     </div>
   </div>
 </section>
@@ -779,6 +855,45 @@ function ileti(ayar){
       kutu.placeholder = ayar.ipucu || "";
       g.appendChild(kutu);
     }
+    // Birden fazla alan: {ad, etiket, tur:"metin|secim|klasor", secenekler, varsayilan}
+    const alanlar = {};
+    (ayar.alanlar || []).forEach(function(a){
+      const sar = document.createElement("div");
+      sar.style.cssText = "display:flex;align-items:center;gap:10px;margin-top:11px";
+      const et = document.createElement("div");
+      et.textContent = a.etiket;
+      et.style.cssText = "width:104px;flex:none;color:var(--soluk);font-size:13px";
+      sar.appendChild(et);
+      let g2;
+      if (a.tur === "secim"){
+        g2 = document.createElement("select");
+        (a.secenekler || []).forEach(function(o){
+          const op = document.createElement("option");
+          op.value = o.deger; op.textContent = o.yazi;
+          g2.appendChild(op);
+        });
+        g2.value = a.varsayilan || "";
+        g2.style.flex = "1";
+      } else {
+        g2 = document.createElement("input");
+        g2.value = a.varsayilan || "";
+        g2.placeholder = a.ipucu || "";
+        g2.style.cssText = "flex:1;margin-top:0";
+      }
+      sar.appendChild(g2);
+      if (a.tur === "klasor"){
+        const d = document.createElement("button");
+        d.textContent = "Seç…";
+        d.onclick = async function(){
+          const c = await post("/api/klasor", {tip:"serbest", baslangic:g2.value});
+          if (c && c.yol) g2.value = c.yol;
+          else if (c && c.hata) bildir(c.hata, "hata");
+        };
+        sar.appendChild(d);
+      }
+      alanlar[a.ad] = g2;
+      g.appendChild(sar);
+    });
     const alt = document.getElementById("ileti-altlik");
     alt.innerHTML = "";
     (ayar.dugmeler || [{yazi:"Tamam", ana:true, deger:true}]).forEach(function(d){
@@ -787,6 +902,11 @@ function ileti(ayar){
       if (d.ana) b.className = "ana";
       if (d.tehlike) b.className = "tehlike";
       b.onclick = function(){
+        if (d.deger === "alanlar"){
+          const c = {};
+          for (const k in alanlar) c[k] = alanlar[k].value;
+          return iletiKapat(c);
+        }
         iletiKapat(d.deger === undefined ? true
                    : (d.deger === "giris" ? (kutu ? kutu.value : "") : d.deger));
       };
@@ -824,13 +944,14 @@ function sonucGoster(ad, satirlar, hataMi, ekDugme){
 let acikSayfa = "calisma";
 function sayfaGec(ad, dugme){
   acikSayfa = ad;
-  for (const s of ["calisma","kutuphane","rapor"])
+  for (const s of ["calisma","kutuphane","arama","rapor"])
     document.getElementById("sayfa-" + s).classList.toggle("gizli", s !== ad);
   document.querySelectorAll(".yanmenu button").forEach(b => b.classList.remove("aktif"));
   if (dugme) dugme.classList.add("aktif");
   window.scrollTo({top:0, behavior:"smooth"});
   if (ad === "kutuphane") kutuphaneYukle();
   if (ad === "rapor") raporYukle();
+  if (ad === "arama") aramaCipleriYukle();
 }
 
 let kutSecili = new Set();
@@ -935,6 +1056,148 @@ async function raporYukle(){
   document.getElementById("rapor-dagilim").innerHTML = raporSatir(
     ["Klasör", "Kare"],
     (d.dagilim || []).map(x => [x.klasor, x.adet]));
+}
+
+let aramaSecili = new Set();
+let aramaSayac = 0;      // gec gelen eski cevabin yeniyi ezmesini onler
+async function aramaCipleriYukle(){
+  const alan = document.getElementById("arama-cipler");
+  let d;
+  try { d = await al("/api/kisiler"); } catch(e){ return; }
+  const ks = d.kisiler || [];
+  if (!ks.length){
+    alan.innerHTML = '<div class="bos-durum" style="padding:24px">' +
+      "Önce tarama ve gruplama yap.</div>";
+    return;
+  }
+  // Cipler DOM ile olusturuluyor: metin icine gomulu onclick, ic ice tirnak
+  // kacisi bozuldugunda tum betigi cokertebiliyor (bir kez yasandi).
+  alan.innerHTML = "";
+  ks.forEach(function(k){
+    const cip = document.createElement("span");
+    cip.className = "cip" + (aramaSecili.has(k.kume) ? " secili" : "");
+    cip.textContent = k.isim || ("kisi_" + String(k.kume).padStart(4, "0"));
+    const sayi = document.createElement("span");
+    sayi.className = "sayi2";
+    sayi.textContent = k.fotograf;
+    cip.appendChild(document.createTextNode(" "));
+    cip.appendChild(sayi);
+    cip.onclick = function(){ aramaCip(k.kume, cip); };
+    alan.appendChild(cip);
+  });
+}
+function aramaCip(kume, oge){
+  if (aramaSecili.has(kume)) { aramaSecili.delete(kume); oge.classList.remove("secili"); }
+  else { aramaSecili.add(kume); oge.classList.add("secili"); }
+  if (aramaSecili.size) aramaYap();
+  else document.getElementById("arama-sonuc-kart").classList.add("gizli");
+}
+async function aramaYap(){
+  if (!aramaSecili.size) return bildir("Önce en az bir kişi seçin.", "uyari");
+  const kart = document.getElementById("arama-sonuc-kart");
+  const ozet = document.getElementById("arama-ozet");
+  const liste = document.getElementById("arama-liste");
+  kart.classList.remove("gizli");
+  ozet.innerHTML = '<div class="sonuc-ozet">aranıyor…</div>';
+  liste.innerHTML = "";
+  const herhangi = document.getElementById("arama-kural").value === "herhangi";
+  const benimSira = ++aramaSayac;
+  const c = await post("/api/ara", {kumeler: [...aramaSecili], herhangi});
+  if (benimSira !== aramaSayac) return;   // bu arada yeni arama baslamis
+  if (!c || c.hata) return bildir((c && c.hata) || "Arama yapılamadı.", "hata");
+
+  const kural = herhangi ? "en az biri" : "hepsi birlikte";
+  let ek = "";
+  if (c.isaretli) ek += " · " + c.isaretli + " seçkide elenmiş";
+  if (c.vetolu) ek += " · " + c.vetolu + " vetolu";
+  ozet.innerHTML = '<div class="sonuc-ozet"><b>' + c.adet + "</b>" +
+    "<span>kare · " + (c.klasor_sayisi || 0) + " klasör · " +
+    aramaSecili.size + " kişi (" + kural + ")" + ek + "</span></div>";
+
+  if (!c.adet){
+    liste.innerHTML = '<div class="bos-durum"><div class="ikon">🔍</div>' +
+      "Bu kişilerin birlikte olduğu kare yok.<br>" +
+      '<span style="font-size:12.5px">Kuralı “herhangi biri” yapmayı deneyebilirsin.</span></div>';
+    return;
+  }
+
+  liste.innerHTML = "";
+  (c.gruplar || []).forEach(function(g){
+    const kutu = document.createElement("div");
+    kutu.className = "klasorgrup";
+    const basi = document.createElement("div");
+    basi.className = "basi";
+    const ok = document.createElement("span");
+    ok.className = "ok"; ok.textContent = "▼";
+    const yol = document.createElement("span");
+    yol.className = "yolad"; yol.textContent = g.klasor;
+    const kac = document.createElement("span");
+    kac.className = "kac"; kac.textContent = g.adet + " kare";
+    basi.appendChild(ok); basi.appendChild(yol); basi.appendChild(kac);
+    basi.onclick = function(){ kutu.classList.toggle("kapali"); };
+    kutu.appendChild(basi);
+
+    const dos = document.createElement("div");
+    dos.className = "dosyalar";
+    g.dosyalar.forEach(function(d){
+      const s = document.createElement("div");
+      s.textContent = d.ad;
+      if (d.vetolu) s.className = "vetolu";
+      else if (d.isaretli) s.className = "isaretli";
+      s.title = g.klasor + "\\" + d.ad;
+      dos.appendChild(s);
+    });
+    if (g.kirpildi){
+      const s = document.createElement("div");
+      s.textContent = "… ve " + g.kirpildi + " dosya daha";
+      dos.appendChild(s);
+    }
+    kutu.appendChild(dos);
+    liste.appendChild(kutu);
+  });
+}
+
+async function aramaEylem(islem){
+  if (islem === "liste") return listeKaydet();
+  if (islem === "klasorle" || islem === "teslim"){
+    const ad = islem === "klasorle" ? "Bu kareleri klasörle" : "Teslim paketi yap";
+    if (!await onay(ad, "Aramada bulunan kareler işlenecek.<br><br>" +
+        "Arşivin geri kalanına dokunulmaz.", "Devam et")) return;
+  }
+  const c = await post("/api/ara-eylem", {islem});
+  if (c && c.hata) return bildir(c.hata, "hata");
+  if (c && c.mesaj) bildir(c.mesaj, "basarili", 6000);
+}
+
+async function listeKaydet(){
+  const d = await al("/api/durum");
+  const bugun = new Date();
+  const iki = function(n){ return String(n).padStart(2, "0"); };
+  const varsayilanAd = "arama-sonucu-" + bugun.getFullYear() +
+    iki(bugun.getMonth() + 1) + iki(bugun.getDate());
+  const sonuc = await ileti({
+    baslik: "Listeyi dosyaya kaydet",
+    govde: "Aramada bulunan karelerin listesi kaydedilecek.",
+    alanlar: [
+      {ad:"klasor", etiket:"Klasör", tur:"klasor",
+       varsayilan: d.ayar.hedef_klasor || "", ipucu:"kaydedilecek klasör"},
+      {ad:"ad", etiket:"Dosya adı", varsayilan: varsayilanAd},
+      {ad:"bicim", etiket:"Biçim", tur:"secim", varsayilan:"csv",
+       secenekler:[
+         {deger:"csv", yazi:"CSV — klasör, dosya, kişiler, durum (Excel)"},
+         {deger:"txt-tam", yazi:"TXT — tam dosya yolları"},
+         {deger:"txt-ad", yazi:"TXT — yalnızca dosya adları"}]}
+    ],
+    dugmeler:[{yazi:"Vazgeç", deger:null},
+              {yazi:"Kaydet", ana:true, deger:"alanlar"}]
+  });
+  if (!sonuc) return;
+  const c = await post("/api/ara-eylem", Object.assign({islem:"liste"}, sonuc));
+  if (c && c.hata) return bildir(c.hata, "hata");
+  if (c && c.ok){
+    sonucGoster("Liste kaydedildi", [c.yol || "", "", (c.mesaj || "")], false,
+      {yazi:"Klasörü aç", islev:function(){ post("/api/klasor-ac", {yol: c.yol}); }});
+  }
 }
 
 async function kisileriYukle(){

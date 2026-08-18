@@ -317,6 +317,27 @@ görünmüş, hangi klasörde kaç kare — hepsi tablo halinde.
 
 ---
 
+## 3m. Arama — kimler aynı karede?
+
+Sol menüden **Arama**. Aradığın kişilere tıkla (iki kişi, üç kişi, kaç kişi olursa).
+Program hepsinin **birlikte** göründüğü kareleri anında bulur.
+
+Sonuç klasör klasör listelenir: hangi klasörde hangi dosyalar. Klasör başlığına
+tıklayınca liste açılıp kapanır.
+
+Bulunanlarla üç şey yapabilirsin:
+
+| Düğme | Ne yapar |
+|---|---|
+| **Bu kareleri klasörle** | Yalnızca bulunan kareleri klasörler, arşivin kalanına dokunmaz |
+| **Teslim paketi yap** | Küçültülmüş kopyalarını + PDF kontak baskısını üretir |
+| **Listeyi dosyaya kaydet** | Klasörü, dosya adını ve biçimi sen seçersin |
+
+Kaydetme biçimleri: **CSV** (Excel'de açılır; klasör, dosya, kişiler, durum),
+**TXT tam yol**, **TXT sadece dosya adı**.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:

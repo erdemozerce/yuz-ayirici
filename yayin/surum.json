@@ -1,6 +1,6 @@
 {
-  "surum": "1.18.0",
-  "notlar": "Kose bildirimleri: kisa mesajlar artik sayfanin neresinde olursan ol gorunuyor",
+  "surum": "1.19.0",
+  "notlar": "Arama sayfasi: kimler ayni karede (2-3-N kisi), klasor+dosya listesi, secenekli disa aktarma (CSV/TXT)",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,12 +10,12 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "c20662f0d7eab2b9105d8684a55916403388d62e667074f2ff79c4324a6baae4"
+      "sha256": "8f7445f5c38726bd525b2bf46ff7bb95bd06159d078ca334439decb062e56895"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "47ad6bd0b9064bababcc087fc44d9af25780e77c32e8bdc30e8b87861ebe8907"
+      "sha256": "10b27bab6652af38e74a80fb173575f182bd1e9f5132fedd4b9f22cfba03914a"
     },
     {
       "ad": "pencere.py",
@@ -25,7 +25,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "af65385d502826a9d2f8c2150cb3ecfa45c1045ff2c3dcfe2318b6135517f5eb"
+      "sha256": "a8e5364f5aa74b0ccc08bcc743a2faf0ab7140afc0090e21adf2ab7d4afc9ebf"
     },
     {
       "ad": "kutuphane.py",

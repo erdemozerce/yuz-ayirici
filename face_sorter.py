@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.18.0"
+__version__ = "1.19.0"
 
 import argparse
 import base64
@@ -1534,6 +1534,16 @@ def cmd_teslim(args):
     con = db_connect(args.db)
     isimler = isim_csv_oku(args.names or "isimler.csv")
 
+    dosya_suzgeci = None
+    if getattr(args, "dosya_listesi", ""):
+        try:
+            dosya_suzgeci = {x.strip() for x in
+                             Path(args.dosya_listesi).read_text(encoding="utf-8").splitlines()
+                             if x.strip()}
+            print("Dosya listesi: %d kare ile sinirlandirildi." % len(dosya_suzgeci))
+        except OSError:
+            print("Dosya listesi okunamadi: %s" % args.dosya_listesi)
+
     secili = set(int(k) for k in (args.kisi or []))
     if args.sadece_isimli:
         isimliler = {c for c, ad in isimler.items() if ad}
@@ -1552,9 +1562,21 @@ def cmd_teslim(args):
     except Exception:
         pass
 
+    dosya_suzgeci = None
+    if getattr(args, "dosya_listesi", ""):
+        try:
+            dosya_suzgeci = {x.strip() for x in
+                             Path(args.dosya_listesi).read_text(encoding="utf-8").splitlines()
+                             if x.strip()}
+            print("Dosya listesi: %d kare." % len(dosya_suzgeci))
+        except OSError:
+            pass
+
     kayitlar = {}
     for cid, yol in con.execute(
             "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+        if dosya_suzgeci is not None and yol not in dosya_suzgeci:
+            continue
         if secili and cid not in secili:
             continue
         if yol in elenen:
@@ -1651,6 +1673,8 @@ def cmd_export(args):
         "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"
     ):
         if path in elenen:
+            continue
+        if dosya_suzgeci is not None and path not in dosya_suzgeci:
             continue
         if secili and cid not in secili:
             continue
@@ -2036,6 +2060,8 @@ def main():
     tl.add_argument("--filigran", default="", help="basilacak filigran metni")
     tl.add_argument("--baslik", default="", help="kontak baskisi basligi")
     tl.add_argument("--kisi", nargs="+", default=None, help="yalnizca bu kisiler")
+    tl.add_argument("--dosya-listesi", default="",
+                    help="yalnizca bu dosyadaki kareleri paketle")
     tl.add_argument("--sadece-isimli", action="store_true")
     tl.add_argument("--kisiye-gore", action="store_true", help="kisi adiyla alt klasorler")
     tl.add_argument("--secki-yoksay", action="store_true", help="secki isaretlerini dikkate alma")
@@ -2059,6 +2085,8 @@ def main():
     e.add_argument("--export-nofaces", action="store_true", help="_yuz_yok klasoru de olustur")
     e.add_argument("--kisi", nargs="+", default=None,
                    help="yalnizca bu kisi numaralarini isle (or: --kisi 3 7)")
+    e.add_argument("--dosya-listesi", default="",
+                   help="yalnizca bu dosyadaki kareleri isle (her satir bir yol)")
     e.add_argument("--sadece-isimli", action="store_true",
                    help="yalnizca isim verilmis kisileri isle")
     e.add_argument("--vetoyu-yoksay", action="store_true",
