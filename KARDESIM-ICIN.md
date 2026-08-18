@@ -39,6 +39,25 @@ Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Bir menü açılı
 3. **8**'e bas → deneme turu. Tarayıcıda bir sayfa açılır, gruplar doğru mu bak
 4. İyiyse **3**'e bas ve bırak çalışsın (10.000 fotoğraf ≈ 1–2 saat)
 
+### Yazmadan önce ne oluyor?
+
+Program **hiçbir şeyi sormadan yazmaz**. Klasörleri oluşturmadan hemen önce:
+
+1. "Kişi klasörleri şu konuma yazılacak: ..." diye sorar — `E` onaylar, `D` başka klasör seçtirir, `I` iptal eder.
+2. Sonra bir özet ekranı gösterir: kaç klasör açılacak, kaç dosya yazılacak, ne kadar yer gerekecek, diskte ne kadar boş var.
+3. Ancak sen `E` dedikten sonra yazmaya başlar.
+
+Disk doluysa hiç başlamaz, uyarıp durur.
+
+### Disk formatı fark eder mi?
+
+Hayır, kendisi anlar:
+
+- **exFAT** disk (Windows + Mac birlikte kullanılan) → fotoğrafların **gerçek kopyası** oluşturulur. Bir fotoğrafta 3 kişi varsa 3 kopya olur, yer kaplar. Özet ekranı ne kadar yer gerektiğini önceden söyler.
+- **NTFS** disk (sadece Windows) → **sabit bağ** kullanılır, fotoğraflar klasörlerde görünür ama neredeyse hiç yer kaplamaz.
+
+Programa bir şey ayarlaman gerekmez, hedef diski görüp doğru yöntemi kendi seçer.
+
 Program çalışırken bilgisayarı kullanabilirsin, sadece biraz yavaşlar.
 Yarıda kesilirse sorun değil — tekrar **3**'e bastığında kaldığı yerden devam eder.
 

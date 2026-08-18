@@ -81,3 +81,19 @@ tuhaf davranır. Bunlarda değişiklik gerekirse yeni ZIP göndermek gerekir
 - Tarama: ~3.6 fotoğraf/saniye → 10.000 fotoğraf ≈ 45–90 dakika
 - NVIDIA kartı olan makinede `KUR.bat` otomatik olarak GPU sürümünü kurar, 5–10 kat hızlanır.
 - Doğrulama testi: 2 kişi × 5 varyant (ölçek/parlaklık/kırpma/ayna) → %100 doğru ayrım.
+
+## Dosya sistemi davranışı (v1.1.0)
+
+`export --mode auto` (varsayılan) hedef klasörde gerçek bir sabit bağ denemesi yapar:
+
+| Hedef | Sonuç | Yer |
+|---|---|---|
+| NTFS, aynı disk | sabit bağ | ~0 |
+| exFAT / FAT32 | gerçek kopya | kopya sayısı kadar |
+| Farklı disk | gerçek kopya | kopya sayısı kadar |
+
+Tahmin yürütmez, deneyip görür — yani Mac'te takılı APFS/exFAT birimlerde de doğru davranır.
+Dosya sistemi adı bilgi amaçlı ayrıca okunur (Windows'ta `GetVolumeInformationW`, diğerlerinde `df -T`).
+
+Yazmadan önce özet ekranı + onay gelir; `--evet` ile otomasyonda atlanır, `--dry-run` hiç yazmaz.
+Disk alanı yetmiyorsa işlem hiç başlamaz.
