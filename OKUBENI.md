@@ -448,3 +448,30 @@ yapışkan uygulama çubuğu, adım numaraları rozet olarak başlıklara gömü
 renk paleti ve yumuşak gölgeler, tabular rakamlar, ilerlemede yüzde göstergesi,
 kart hover davranışları, daha büyük yüz küçük resimleri, gradyanlı seçim çubuğu,
 ince kaydırma çubuğu.
+
+## Kenar menü + Kişi kütüphanesi sayfası (v1.16.0)
+
+Arayüz üç sayfaya ayrıldı: **Çalışma** (mevcut doğrusal akış — varsayılan),
+**Kişi kütüphanesi**, **Rapor**. Menü solda yapışkan; dar ekranda yatay şeride dönüşür.
+
+### Kütüphaneye kapak resmi
+
+`kisiler` tablosuna `kapak` BLOB sütunu eklendi (eski kütüphaneler `ALTER TABLE` ile
+otomatik yükseltilir). `kutuphaneye_isle` öğretirken kümenin **merkeze en yakın**
+yüzünden 140×140 JPEG kapak üretiyor (~4 KB). Kütüphane artık görsel: kimin kayıtlı
+olduğu bakışta görülüyor. Yedek dosyası da kapağı taşıyor (`surum: 2`).
+
+### Kütüphane işlemleri
+
+`kutuphane.py`: `yeniden_adlandir` (çakışma kontrollü — aynı isim varsa birleştirmeye
+yönlendiriyor), `kisi_birlestir` (örnekler birleşir, kapak korunur), `kapak_al`.
+Arayüzde: kart başına *seç / yeniden adlandır / sil*, iki veya daha fazla seçilince
+**birleştirme kartı** beliriyor; ayrıca *Yedek al* ve *Yedekten geri yükle*.
+
+Uçlar: `GET /api/kutuphane`, `GET /api/rapor`, `POST /api/kutuphane-islem`
+(adlandir / birlestir / sil / yedekle / geri-yukle).
+
+### Rapor sayfası
+
+Kişi tablosu, birlikte en çok görünen ikililer, klasör dağılımı — `cmd_rapor`'un
+verdiği bilgiler arayüzde tablo olarak.

@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.15.0"
+__version__ = "1.16.0"
 
 import argparse
 import base64
@@ -636,6 +636,30 @@ def isim_csv_yaz(con, yol):
     return len(kumeler)
 
 
+def kume_kapagi(con, cid, boy=140):
+    """Kumenin en temsili yuzunden kucuk bir kapak resmi (JPEG baytlari)."""
+    try:
+        ornekler = kume_ornekleri(con, cid, 1)
+        if not ornekler:
+            return None
+        _, p, x1, y1, x2, y2 = ornekler[0]
+        img = imread_unicode(p)
+        if img is None:
+            return None
+        h, w = img.shape[:2]
+        mx, my = (x2 - x1) * 0.35, (y2 - y1) * 0.35
+        a1, b1 = max(int(x1 - mx), 0), max(int(y1 - my), 0)
+        a2, b2 = min(int(x2 + mx), w), min(int(y2 + my), h)
+        kirpma = img[b1:b2, a1:a2]
+        if kirpma.size == 0:
+            return None
+        kirpma = cv2.resize(kirpma, (boy, boy), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return buf.tobytes() if ok else None
+    except Exception:
+        return None
+
+
 def kutuphaneye_isle(con, names_yol, kutuphane_yolu, kaynak="", sessiz=False):
     """isimler.csv'de ismi olan her kumeyi kalici kutuphaneye ogretir."""
     import kutuphane
@@ -652,7 +676,8 @@ def kutuphaneye_isle(con, names_yol, kutuphane_yolu, kaynak="", sessiz=False):
         E = kume_vektorleri(con, cid)
         if not len(E):
             continue
-        adet = kutuphane.ogret(kcon, isim, E, kaynak=kaynak)
+        adet = kutuphane.ogret(kcon, isim, E, kaynak=kaynak,
+                               kapak=kume_kapagi(con, cid))
         n += 1
         if not sessiz:
             print("  ogrenildi: %-28s (%d ornek saklaniyor)" % (isim, adet))

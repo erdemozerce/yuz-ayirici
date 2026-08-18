@@ -156,6 +156,50 @@
     color:var(--kirmizi);padding:12px 15px;border-radius:var(--r2);font-size:13px;
     margin-bottom:14px}
   label{cursor:pointer}
+
+  /* ---- kenar menu ---- */
+  .govde{display:flex;align-items:flex-start;max-width:1180px;margin:0 auto;gap:0}
+  .yanmenu{position:sticky;top:69px;flex:none;width:210px;padding:24px 14px 24px 26px}
+  .yanmenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    background:transparent;border:1px solid transparent;margin-bottom:4px;
+    padding:10px 13px;border-radius:var(--r2);color:var(--soluk);font-weight:520}
+  .yanmenu button:hover{background:var(--yuzey);color:var(--yazi);
+    border-color:var(--cizgi);transform:none}
+  .yanmenu button.aktif{background:var(--yuzey);color:var(--vurgu);
+    border-color:var(--vurgu);font-weight:620}
+  .yanmenu .ikon{font-size:16px;width:20px;text-align:center;flex:none}
+  .yanmenu .grup{font-size:11px;text-transform:uppercase;letter-spacing:.8px;
+    color:var(--soluk);padding:14px 13px 6px;opacity:.7}
+  .govde .sar{flex:1;min-width:0;padding:24px 26px 80px}
+  @media (max-width:900px){
+    .govde{flex-direction:column}
+    .yanmenu{position:static;width:100%;display:flex;gap:6px;overflow-x:auto;
+      padding:14px 20px 0}
+    .yanmenu button{width:auto;white-space:nowrap;margin-bottom:0}
+    .yanmenu .grup{display:none}
+  }
+
+  /* ---- kutuphane kartlari ---- */
+  .kut{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .kutkart{background:var(--yuzey2);border:1px solid var(--cizgi);border-radius:var(--r);
+    padding:13px;display:flex;gap:12px;align-items:flex-start;transition:.15s}
+  .kutkart:hover{border-color:var(--vurgu);transform:translateY(-2px)}
+  .kutkart.secili{border-color:var(--vurgu);box-shadow:0 0 0 2px rgba(91,140,255,.35)}
+  .kutkart img{width:60px;height:60px;border-radius:12px;object-fit:cover;flex:none}
+  .kutkart .yok{width:60px;height:60px;border-radius:12px;flex:none;
+    background:var(--yuzey);display:grid;place-items:center;font-size:22px;opacity:.5}
+  .kutkart .bilgi{min-width:0;flex:1}
+  .kutkart .ad{font-weight:600;font-size:13.5px;word-break:break-word}
+  .kutkart .alt{color:var(--soluk);font-size:11.5px;margin-top:3px}
+  .kutkart .islem{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+  .kutkart .islem button{padding:3px 9px;font-size:11px;border-radius:7px}
+  .tablo{width:100%;border-collapse:collapse;font-size:13px}
+  .tablo th{text-align:left;color:var(--soluk);font-weight:560;font-size:12px;
+    padding:8px 10px;border-bottom:1px solid var(--cizgi)}
+  .tablo td{padding:8px 10px;border-bottom:1px solid var(--cizgi);
+    font-variant-numeric:tabular-nums}
+  .tablo tr:last-child td{border-bottom:0}
+  .tablo td.sayi{text-align:right;color:var(--soluk)}
 </style>
 </head>
 <body>
@@ -171,7 +215,19 @@
   </div>
 </div>
 
+<div class="govde">
+<nav class="yanmenu">
+  <div class="grup">Program</div>
+  <button class="aktif" onclick="sayfaGec('calisma', this)">
+    <span class="ikon">▶</span> Çalışma</button>
+  <button onclick="sayfaGec('kutuphane', this)">
+    <span class="ikon">👤</span> Kişi kütüphanesi</button>
+  <button onclick="sayfaGec('rapor', this)">
+    <span class="ikon">📊</span> Rapor</button>
+</nav>
+
 <div class="sar">
+<section id="sayfa-calisma">
 
   <div id="guncelleme" class="gizli" style="background:rgba(79,140,255,.12);
        border:1px solid var(--vurgu);color:var(--yazi);padding:13px 16px;
@@ -355,7 +411,56 @@
     </div>
   </div>
 
+</section>
+
+<section id="sayfa-kutuphane" class="gizli">
+  <div class="kart">
+    <h2 data-adim="👤">Kişi kütüphanesi <span id="kut-sayi"></span></h2>
+    <div class="ipucu" style="border-top:0;padding-top:0;margin-top:0;margin-bottom:16px">
+      Burada program"un tanıdığı kişiler durur. Bir kişiye isim verip onayladığında
+      buraya kaydedilir; sonraki bölümlerde o kişiyi kendisi tanır.
+      Bu liste <b>fotoğraf içermez</b>, yalnızca yüzlerden çıkarılan sayıları ve
+      küçük bir kapak resmini tutar.
+    </div>
+    <div id="kut-liste"></div>
+    <div class="dugmeler">
+      <button onclick="kutuphaneYukle()">Yenile</button>
+      <button onclick="kutIslem('yedekle')">Yedek al</button>
+      <button onclick="kutGeriYukle()">Yedekten geri yükle</button>
+    </div>
+  </div>
+
+  <div class="kart" id="kut-birlestir-kart" style="display:none">
+    <h2 data-adim="⚑">Seçilenleri birleştir</h2>
+    <div class="ipucu" style="border-top:0;padding-top:0;margin-top:0">
+      Aynı kişi kütüphaneye iki farklı isimle kaydedilmişse tek isimde toplayabilirsin.
+      Örnekler birleşir, hiçbir bilgi kaybolmaz.
+    </div>
+    <div class="satir">
+      <div class="etiket">Toplanacak isim</div>
+      <select id="kut-hedef" style="flex:1"></select>
+      <button class="ana" onclick="kutBirlestir()">Birleştir</button>
+    </div>
+  </div>
+</section>
+
+<section id="sayfa-rapor" class="gizli">
+  <div class="kart">
+    <h2 data-adim="📊">Kişiler</h2>
+    <div id="rapor-kisiler"></div>
+  </div>
+  <div class="kart">
+    <h2 data-adim="🤝">Birlikte en çok görünenler</h2>
+    <div id="rapor-ikili"></div>
+  </div>
+  <div class="kart">
+    <h2 data-adim="📁">Klasör dağılımı</h2>
+    <div id="rapor-dagilim"></div>
+  </div>
+</section>
+
   <datalist id="bilinen-isimler"></datalist>
+</div>
 </div>
 
 <script>
@@ -529,6 +634,116 @@ async function guncelle(){
   const c = await post("/api/guncelle", {islem:"uygula"});
   alert(c.mesaj || (c.ok ? "Güncellendi." : "Güncelleme yapılamadı."));
   durumGuncelle();
+}
+
+let acikSayfa = "calisma";
+function sayfaGec(ad, dugme){
+  acikSayfa = ad;
+  for (const s of ["calisma","kutuphane","rapor"])
+    document.getElementById("sayfa-" + s).classList.toggle("gizli", s !== ad);
+  document.querySelectorAll(".yanmenu button").forEach(b => b.classList.remove("aktif"));
+  if (dugme) dugme.classList.add("aktif");
+  window.scrollTo({top:0, behavior:"smooth"});
+  if (ad === "kutuphane") kutuphaneYukle();
+  if (ad === "rapor") raporYukle();
+}
+
+let kutSecili = new Set();
+async function kutuphaneYukle(){
+  const alan = document.getElementById("kut-liste");
+  alan.innerHTML = '<div class="bos-durum">yükleniyor…</div>';
+  let d;
+  try { d = await al("/api/kutuphane"); } catch(e){ alan.innerHTML = ""; return; }
+  const ks = d.kisiler || [];
+  document.getElementById("kut-sayi").textContent = ks.length ? "· " + ks.length + " kişi" : "";
+  kutSecili.clear();
+  kutBirlestirGuncelle();
+  if (!ks.length){
+    alan.innerHTML = '<div class="bos-durum"><div class="ikon">👤</div>' +
+      "Kütüphane henüz boş.<br>Bir bölümde kişilere isim verip onayladığında burası dolar.</div>";
+    return;
+  }
+  alan.innerHTML = '<div class="kut">' + ks.map(k => {
+    const g = k.kapak ? ('<img src="' + k.kapak + '" alt="">')
+                      : '<div class="yok">👤</div>';
+    const ad = k.isim.replace(/"/g, "&quot;");
+    return '<div class="kutkart" data-isim="' + ad + '">' + g +
+      '<div class="bilgi"><div class="ad">' + k.isim + "</div>" +
+      '<div class="alt">' + k.ornek + " örnek · " + (k.guncelleme || k.eklenme || "") + "</div>" +
+      '<div class="islem">' +
+        '<button onclick="kutSec(this)">seç</button>' +
+        '<button onclick="kutAdlandir(this)">yeniden adlandır</button>' +
+        '<button class="tehlike" onclick="kutSil(this)">sil</button>' +
+      "</div></div></div>";
+  }).join("") + "</div>";
+}
+
+function kutKartIsim(dugme){ return dugme.closest(".kutkart").dataset.isim; }
+function kutSec(dugme){
+  const kart = dugme.closest(".kutkart"), isim = kart.dataset.isim;
+  if (kutSecili.has(isim)) { kutSecili.delete(isim); kart.classList.remove("secili"); }
+  else { kutSecili.add(isim); kart.classList.add("secili"); }
+  kutBirlestirGuncelle();
+}
+function kutBirlestirGuncelle(){
+  const kart = document.getElementById("kut-birlestir-kart");
+  const sec = document.getElementById("kut-hedef");
+  if (!kart) return;
+  kart.style.display = kutSecili.size >= 2 ? "" : "none";
+  if (sec) sec.innerHTML = [...kutSecili].map(i =>
+    '<option value="' + i.replace(/"/g,"&quot;") + '">' + i + "</option>").join("");
+}
+async function kutIslem(islem, ek){
+  const c = await post("/api/kutuphane-islem", Object.assign({islem}, ek || {}));
+  if (c && c.mesaj) alert(c.mesaj);
+  kutuphaneYukle();
+  durumGuncelle();
+}
+async function kutAdlandir(dugme){
+  const eski = kutKartIsim(dugme);
+  const yeni = prompt("Yeni isim:", eski);
+  if (yeni === null || yeni.trim() === "" || yeni === eski) return;
+  kutIslem("adlandir", {eski, yeni: yeni.trim()});
+}
+async function kutSil(dugme){
+  const isim = kutKartIsim(dugme);
+  if (!confirm('"' + isim + '" kütüphaneden silinecek.\n\n' +
+      "Fotoğraflara dokunulmaz; program bu kişiyi bir daha otomatik tanımaz. Devam?")) return;
+  kutIslem("sil", {isim});
+}
+async function kutBirlestir(){
+  const hedef = document.getElementById("kut-hedef").value;
+  const kaynaklar = [...kutSecili].filter(i => i !== hedef);
+  if (!hedef || !kaynaklar.length) return;
+  if (!confirm(kaynaklar.length + " kayıt \"" + hedef + "\" altında toplanacak. Devam?")) return;
+  kutIslem("birlestir", {hedef, kaynaklar});
+}
+async function kutGeriYukle(){
+  const yol = prompt("Yedek dosyasının tam yolu:");
+  if (!yol) return;
+  kutIslem("geri-yukle", {yol: yol.trim()});
+}
+
+function raporSatir(basliklar, satirlar){
+  if (!satirlar.length) return '<div class="bos-durum">Veri yok.</div>';
+  return '<table class="tablo"><tr>' +
+    basliklar.map(b => "<th>" + b + "</th>").join("") + "</tr>" +
+    satirlar.map(s => "<tr>" + s.map((h,i) =>
+      '<td' + (i ? ' class="sayi"' : "") + ">" + h + "</td>").join("") + "</tr>").join("") +
+    "</table>";
+}
+async function raporYukle(){
+  let d;
+  try { d = await al("/api/rapor"); } catch(e){ return; }
+  document.getElementById("rapor-kisiler").innerHTML = raporSatir(
+    ["Kişi", "Fotoğraf", "Yüz"],
+    (d.kisiler || []).slice(0, 40).map(k => [k.ad, k.fotograf, k.yuz]));
+  document.getElementById("rapor-ikili").innerHTML = raporSatir(
+    ["Kişi", "Kişi", "Birlikte kare"],
+    (d.ikili || []).map(i => [i.a, i.b, i.adet]));
+  document.getElementById("rapor-dagilim").innerHTML = raporSatir(
+    ["Klasör", "Kare"],
+    (d.dagilim || []).map(x => [x.klasor, x.adet]));
 }
 
 async function kisileriYukle(){

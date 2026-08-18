@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS kisiler(
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     isim       TEXT UNIQUE NOT NULL,
     eklenme    TEXT,
-    guncelleme TEXT
+    guncelleme TEXT,
+    kapak      BLOB
 );
 CREATE TABLE IF NOT EXISTS ornekler(
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +60,11 @@ def ac(yol=None):
     yol = Path(yol) if yol else Path(__file__).resolve().parent / DOSYA_ADI
     con = sqlite3.connect(str(yol))
     con.executescript(SEMA)
+    # eski kutuphanelere kapak sutunu ekle
+    sutunlar = {r[1] for r in con.execute("PRAGMA table_info(kisiler)")}
+    if "kapak" not in sutunlar:
+        con.execute("ALTER TABLE kisiler ADD COLUMN kapak BLOB")
+        con.commit()
     return con
 
 
@@ -75,7 +81,7 @@ def _cesitli_sec(X, adet):
     return X[secili]
 
 
-def ogret(con, isim, E, kaynak="", sinir=ORNEK_SINIRI):
+def ogret(con, isim, E, kaynak="", sinir=ORNEK_SINIRI, kapak=None):
     """Bir kisiye ait yuz vektorlerini kutuphaneye ekler. Eklenen sayiyi dondurur."""
     isim = (isim or "").strip()
     if not isim:
@@ -84,13 +90,16 @@ def ogret(con, isim, E, kaynak="", sinir=ORNEK_SINIRI):
     if E.size == 0:
         return 0
 
-    satir = con.execute("SELECT id FROM kisiler WHERE isim = ?", (isim,)).fetchone()
+    satir = con.execute("SELECT id, kapak FROM kisiler WHERE isim = ?", (isim,)).fetchone()
     if satir:
         kisi_id = satir[0]
         con.execute("UPDATE kisiler SET guncelleme = ? WHERE id = ?", (_simdi(), kisi_id))
+        if kapak and not satir[1]:            # kapagi yoksa simdi koy
+            con.execute("UPDATE kisiler SET kapak = ? WHERE id = ?", (kapak, kisi_id))
     else:
-        cur = con.execute("INSERT INTO kisiler(isim, eklenme, guncelleme) VALUES(?,?,?)",
-                          (isim, _simdi(), _simdi()))
+        cur = con.execute(
+            "INSERT INTO kisiler(isim, eklenme, guncelleme, kapak) VALUES(?,?,?,?)",
+            (isim, _simdi(), _simdi(), kapak))
         kisi_id = cur.lastrowid
 
     eski = _oku(con, kisi_id)
@@ -123,13 +132,68 @@ def herkes(con):
     return out
 
 
-def liste(con):
-    """[(isim, ornek_sayisi, eklenme, guncelleme), ...]"""
+def liste(con, kapakli=False):
+    """[(isim, ornek_sayisi, eklenme, guncelleme[, kapak]), ...]"""
+    alanlar = "k.isim, COUNT(o.id), k.eklenme, k.guncelleme"
+    if kapakli:
+        alanlar += ", k.kapak"
     return con.execute(
-        "SELECT k.isim, COUNT(o.id), k.eklenme, k.guncelleme "
-        "FROM kisiler k LEFT JOIN ornekler o ON o.kisi_id = k.id "
-        "GROUP BY k.id ORDER BY COUNT(o.id) DESC"
+        "SELECT %s FROM kisiler k LEFT JOIN ornekler o ON o.kisi_id = k.id "
+        "GROUP BY k.id ORDER BY COUNT(o.id) DESC" % alanlar
     ).fetchall()
+
+
+def yeniden_adlandir(con, eski, yeni):
+    """Kutuphanedeki bir kisiyi yeniden adlandirir."""
+    eski, yeni = (eski or "").strip(), (yeni or "").strip()
+    if not eski or not yeni:
+        return False, "Isim bos olamaz"
+    if eski == yeni:
+        return True, "Isim zaten ayni"
+    var = con.execute("SELECT id FROM kisiler WHERE isim = ?", (eski,)).fetchone()
+    if not var:
+        return False, "Kutuphanede yok: %s" % eski
+    cakisma = con.execute("SELECT id FROM kisiler WHERE isim = ?", (yeni,)).fetchone()
+    if cakisma:
+        return False, ("'%s' zaten var. Ikisini tek kisi yapmak icin BIRLESTIR kullanin."
+                       % yeni)
+    con.execute("UPDATE kisiler SET isim = ?, guncelleme = ? WHERE id = ?",
+                (yeni, _simdi(), var[0]))
+    con.commit()
+    return True, "%s -> %s" % (eski, yeni)
+
+
+def kisi_birlestir(con, hedef, kaynaklar):
+    """Birden fazla kutuphane kaydini tek isimde toplar (ornekler birlesir)."""
+    hedef = (hedef or "").strip()
+    kaynaklar = [k.strip() for k in kaynaklar if k and k.strip() and k.strip() != hedef]
+    if not hedef or not kaynaklar:
+        return False, "Hedef ve en az bir kaynak gerekli"
+    toplam = []
+    kapak = None
+    h = con.execute("SELECT id, kapak FROM kisiler WHERE isim = ?", (hedef,)).fetchone()
+    if h:
+        toplam.append(_oku(con, h[0]))
+        kapak = h[1]
+    for ad in kaynaklar:
+        r = con.execute("SELECT id, kapak FROM kisiler WHERE isim = ?", (ad,)).fetchone()
+        if not r:
+            continue
+        toplam.append(_oku(con, r[0]))
+        kapak = kapak or r[1]
+        con.execute("DELETE FROM ornekler WHERE kisi_id = ?", (r[0],))
+        con.execute("DELETE FROM kisiler WHERE id = ?", (r[0],))
+    toplam = [t for t in toplam if len(t)]
+    if not toplam:
+        return False, "Birlestirilecek ornek yok"
+    con.commit()
+    ogret(con, hedef, np.vstack(toplam), kaynak="birlestirme", kapak=kapak)
+    return True, "%d kayit '%s' altinda toplandi" % (len(kaynaklar) + 1, hedef)
+
+
+def kapak_al(con, isim):
+    r = con.execute("SELECT kapak FROM kisiler WHERE isim = ?", (isim,)).fetchone()
+    return r[0] if r else None
 
 
 def sil(con, isim):
@@ -183,13 +247,15 @@ def disa_aktar(con, yol):
     """
     import base64
     import json
-    veri = {"surum": 1, "tarih": _simdi(), "kisiler": []}
+    veri = {"surum": 2, "tarih": _simdi(), "kisiler": []}
     for isim, E in herkes(con):
+        kapak = kapak_al(con, isim)
         veri["kisiler"].append({
             "isim": isim,
             "ornek": len(E),
             "vektorler": base64.b64encode(
                 np.asarray(E, dtype=np.float32).tobytes()).decode("ascii"),
+            "kapak": base64.b64encode(kapak).decode("ascii") if kapak else "",
         })
     Path(yol).write_text(json.dumps(veri, ensure_ascii=False), encoding="utf-8")
     return len(veri["kisiler"])
@@ -208,7 +274,8 @@ def ice_aktar(con, yol):
             continue
         ham = base64.b64decode(k["vektorler"])
         E = np.frombuffer(ham, dtype=np.float32).reshape(-1, 512)
-        ogret(con, isim, E, kaynak="yedek")
+        kapak = base64.b64decode(k["kapak"]) if k.get("kapak") else None
+        ogret(con, isim, E, kaynak="yedek", kapak=kapak)
         if isim in mevcut:
             guncellenen += 1
         else:

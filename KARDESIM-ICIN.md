@@ -295,6 +295,28 @@ Geri yüklerken mevcut kütüphanenin üstüne yazmaz, birleştirir.
 
 ---
 
+## 3k. Kişi kütüphanesi sayfası
+
+Sol menüden **Kişi kütüphanesi**'ne geç. Programın tanıdığı herkesi burada
+kapak fotoğrafıyla görürsün.
+
+| İşlem | Ne yapar |
+|---|---|
+| **yeniden adlandır** | İsmi düzeltir (yanlış yazdıysan) |
+| **seç** → 2+ kişi | Aynı kişi iki isimle kaydedilmişse tek isimde toplar |
+| **sil** | O kişiyi kütüphaneden çıkarır — fotoğraflara dokunmaz |
+| **Yedek al** | Kütüphaneyi tek dosyaya yedekler |
+
+Bilgisayar değiştirirsen yedek dosyasını taşıyıp **Yedekten geri yükle** dersin,
+tanıdığı herkes geri gelir.
+
+## 3l. Rapor sayfası
+
+Sol menüden **Rapor**: kimin kaç karesi var, **kim kiminle birlikte** en çok
+görünmüş, hangi klasörde kaç kare — hepsi tablo halinde.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:

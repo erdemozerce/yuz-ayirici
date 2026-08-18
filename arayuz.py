@@ -235,6 +235,83 @@ def kucuk_resim(kayit, boy=132):
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
 
 
+def kutuphane_listesi():
+    """Kutuphanedeki kisiler + kapak resimleri (base64)."""
+    kut = BASE / "kisi_kutuphanesi.db"
+    if not kut.exists():
+        return []
+    try:
+        import kutuphane
+        c = kutuphane.ac(kut)
+        out = []
+        for isim, adet, eklenme, guncelleme, kapak in kutuphane.liste(c, kapakli=True):
+            out.append({
+                "isim": isim, "ornek": adet,
+                "eklenme": eklenme or "", "guncelleme": guncelleme or "",
+                "kapak": ("data:image/jpeg;base64," + base64.b64encode(kapak).decode("ascii"))
+                         if kapak else "",
+            })
+        c.close()
+        return out
+    except Exception:
+        return []
+
+
+def rapor_verisi():
+    """Rapor sayfasi icin ozet + birlikte gorunme."""
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return {}
+    try:
+        con = sqlite3.connect(str(yol))
+        con.executescript(motor.DB_SCHEMA)
+        isimler = motor.isim_csv_oku(BASE / "isimler.csv")
+
+        def ad(cid):
+            return isimler.get(cid) or ("kisi_%04d" % cid)
+
+        kisiler = [{"kume": c, "ad": ad(c), "fotograf": f, "yuz": y}
+                   for c, f, y in con.execute(
+                       "SELECT cluster, COUNT(DISTINCT path), COUNT(*) FROM faces "
+                       "WHERE cluster > 0 GROUP BY cluster ORDER BY COUNT(DISTINCT path) DESC")]
+
+        kare_kisi = {}
+        for cid, p in con.execute(
+                "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+            kare_kisi.setdefault(p, set()).add(cid)
+        beraber = {}
+        for kumeler in kare_kisi.values():
+            k = sorted(kumeler)
+            for i in range(len(k)):
+                for j in range(i + 1, len(k)):
+                    beraber[(k[i], k[j])] = beraber.get((k[i], k[j]), 0) + 1
+        ikili = [{"a": ad(x), "b": ad(y), "adet": n}
+                 for (x, y), n in sorted(beraber.items(), key=lambda z: -z[1])[:12]]
+
+        klasorler = {}
+        for (p,) in con.execute("SELECT path FROM files WHERE n_faces > 0"):
+            k = os.path.dirname(p)
+            klasorler[k] = klasorler.get(k, 0) + 1
+        dagilim = [{"klasor": k, "adet": n}
+                   for k, n in sorted(klasorler.items(), key=lambda z: -z[1])[:12]]
+
+        try:
+            isaretli = con.execute(
+                "SELECT COUNT(*) FROM secki WHERE bayrak != ''").fetchone()[0]
+        except Exception:
+            isaretli = 0
+        try:
+            vetolu = con.execute(
+                "SELECT COUNT(*) FROM onay WHERE durum='red'").fetchone()[0]
+        except Exception:
+            vetolu = 0
+        con.close()
+        return {"kisiler": kisiler, "ikili": ikili, "dagilim": dagilim,
+                "isaretli": isaretli, "vetolu": vetolu}
+    except Exception:
+        return {}
+
+
 def kisiler_listesi(adet=5):
     yol = Path(db_yolu())
     if not yol.exists():
@@ -348,6 +425,10 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json(d)
         if u.path == "/api/kisiler":
             return self._json({"kisiler": kisiler_listesi()})
+        if u.path == "/api/kutuphane":
+            return self._json({"kisiler": kutuphane_listesi()})
+        if u.path == "/api/rapor":
+            return self._json(rapor_verisi())
         self.send_response(404)
         self.end_headers()
 
@@ -426,6 +507,43 @@ class Vekil(BaseHTTPRequestHandler):
         if u.path == "/api/isim":
             isim_kaydet(veri.get("kume"), veri.get("isim", ""))
             return self._json({"ok": True})
+
+        if u.path == "/api/kutuphane-islem":
+            try:
+                import kutuphane
+            except Exception as e:
+                return self._json({"hata": str(e)}, 500)
+            kut = BASE / "kisi_kutuphanesi.db"
+            c = kutuphane.ac(kut)
+            islem = veri.get("islem")
+            try:
+                if islem == "adlandir":
+                    ok, mesaj = kutuphane.yeniden_adlandir(
+                        c, veri.get("eski", ""), veri.get("yeni", ""))
+                elif islem == "birlestir":
+                    ok, mesaj = kutuphane.kisi_birlestir(
+                        c, veri.get("hedef", ""), veri.get("kaynaklar") or [])
+                elif islem == "sil":
+                    ok = kutuphane.sil(c, veri.get("isim", ""))
+                    mesaj = ("Silindi: %s" % veri.get("isim")) if ok else "Kisi bulunamadi"
+                elif islem == "yedekle":
+                    hedef = BASE / ("kutuphane-yedek-%s.json" % time.strftime("%Y%m%d"))
+                    n = kutuphane.disa_aktar(c, hedef)
+                    ok, mesaj = True, "%d kisi yedeklendi: %s" % (n, hedef.name)
+                elif islem == "geri-yukle":
+                    p = (veri.get("yol") or "").strip().strip('"')
+                    if not p or not os.path.isfile(p):
+                        ok, mesaj = False, "Yedek dosyasi bulunamadi"
+                    else:
+                        e_, g_ = kutuphane.ice_aktar(c, p)
+                        ok, mesaj = True, "%d yeni, %d guncellenen kisi" % (e_, g_)
+                else:
+                    ok, mesaj = False, "Bilinmeyen islem"
+            except Exception as e:
+                ok, mesaj = False, str(e)
+            finally:
+                c.close()
+            return self._json({"ok": ok, "mesaj": mesaj}, 200 if ok else 400)
 
         if u.path == "/api/duzelt":
             islem = veri.get("islem")

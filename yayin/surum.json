@@ -1,6 +1,6 @@
 {
-  "surum": "1.15.0",
-  "notlar": "Program artik kendi masaustu penceresinde aciliyor (tarayici yok) + gorsel yenileme",
+  "surum": "1.16.0",
+  "notlar": "Kenar menu: Calisma / Kisi kutuphanesi / Rapor sayfalari; kutuphaneye kapak resmi, yeniden adlandirma, birlestirme, yedekleme",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,12 +10,12 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "c054dead3b6c12a4854a2bab21141ceb795c98f8640e21589b6ec59534a13410"
+      "sha256": "55e5416b039404135488b8d27778c55be795914ad3388a8aa213131349d59077"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "95223bfa9cbc3dc175fc990641a7b4ab42f9f5cad25e176db8d6e84b7c816e09"
+      "sha256": "47ad6bd0b9064bababcc087fc44d9af25780e77c32e8bdc30e8b87861ebe8907"
     },
     {
       "ad": "pencere.py",
@@ -25,12 +25,12 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "c55a01c2a5f0e874b85f87414877da3d39c542e9a64513cede44bb2a2504f1ec"
+      "sha256": "20db60c2dedc0cd49b46e79da14d0e453dfe8ffb24d5d104a1dfbf238ec9bc97"
     },
     {
       "ad": "kutuphane.py",
       "url": "kutuphane.py",
-      "sha256": "0c8f0f2cc65ce9c2dd484cb2a6e81691b857d1f1d3bf124e28a5c3e5b94f7792"
+      "sha256": "65c45ee52a5e42e2bbde1642ee265cfe8453ed6fe5294df9e7f383d07b01581a"
     },
     {
       "ad": "etiket.py",
