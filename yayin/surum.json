@@ -1,6 +1,6 @@
 {
-  "surum": "1.12.5",
-  "notlar": "KRITIK: arayuzdeki JavaScript sozdizimi hatasi duzeltildi - 1.12.1-1.12.4 arasi tum dugmeler calismiyordu",
+  "surum": "1.13.0",
+  "notlar": "Hizli tarama secenegi (dedektor 512, %36 hizli); coklu surec olculdu ve varsayilan disi birakildi",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,17 +10,17 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "3cdf5420a2970bc6f4b00b7b3cb13f3a679e73294f1bb3175de8a4895840c1e7"
+      "sha256": "e8b50adbb4021af4006dc18bf6b3131259779bbc97a4569acc758cde2fe559c4"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "c0a0f5112b91ff412ee77921df5287d810d5e6ca2280528f25c4a0ed2c28f09e"
+      "sha256": "5831f83f7184ab116586f60c70c8ed915b4ff0de92a7aff1fb9543ee9e4431bb"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "1dfd6f167a47596f849b97477259ccb4cc1d1085fa61d5879b1367ff5ee706c9"
+      "sha256": "7303ef1078095dc2bdf2520133fb68e224329fb14b843d3e4875c6b45f7de32b"
     },
     {
       "ad": "kutuphane.py",

@@ -108,7 +108,7 @@ def ayar_oku():
         "db": str(BASE / "faces.db"),
         "eps": 0.50, "min_samples": 3, "mod": "auto",
         "duzen": "altklasor-kisi", "derinlik": 0, "etiket_mod": "gomulu",
-        "secki_atla": False,
+        "secki_atla": False, "hizli_tarama": False,
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -417,7 +417,7 @@ class Vekil(BaseHTTPRequestHandler):
 
         if u.path == "/api/ayar":
             for k in ("eps", "min_samples", "mod", "duzen", "derinlik", "etiket_mod",
-                      "secki_atla"):
+                      "secki_atla", "hizli_tarama"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -471,6 +471,8 @@ class Vekil(BaseHTTPRequestHandler):
                 if not kaynaklar:
                     return self._json({"hata": "Once en az bir fotograf klasoru ekleyin"}, 400)
                 a = ["scan", "--src"] + kaynaklar + ["--db", db]
+                if cfg.get("hizli_tarama"):
+                    a += ["--hizli"]
                 if veri.get("deneme"):
                     a += ["--limit", "300"]
                 return self._json({"ok": is_calistir("Fotograflar taraniyor", a)})

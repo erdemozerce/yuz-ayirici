@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.12.5"
+__version__ = "1.13.0"
 
 import argparse
 import base64
@@ -425,6 +425,9 @@ def cmd_scan(args):
     print("Dosyalar listeleniyor...")
     for k in kaynaklar:
         print("  kaynak: %s" % k)
+    if getattr(args, "hizli", False) and args.det_size == 640:
+        args.det_size = 512
+        print("  Hizli tarama: dedektor 512 (kucuk/uzak yuzler kacirilabilir)")
     files = list_images(kaynaklar)
     if args.limit:
         files = files[: args.limit]
@@ -449,7 +452,11 @@ def cmd_scan(args):
     if not todo:
         return
 
-    isci = args.isci if args.isci > 0 else max(1, min((os.cpu_count() or 2) - 1, 4))
+    # Olculdu: coklu surec CPU'da YAVASLATIYOR (1.14 -> 0.86 foto/sn).
+    # Sebep: ONNX Runtime tek goruntu icin zaten tum cekirdekleri kullaniyor;
+    # surec basina tek is parcacigina inince kazanc degil kayip oluyor.
+    # Secenek duruyor (GPU'lu ya da cok cekirdekli makinelerde denenebilir).
+    isci = args.isci if args.isci > 0 else 1
     if len(todo) < 8:
         isci = 1
     print(f"Model yukleniyor ({args.model}, {'GPU' if args.gpu else 'CPU'}, "
@@ -1709,7 +1716,11 @@ def main():
     s.add_argument("--max-side", type=int, default=1600, help="isleme oncesi kucultme sinirini belirler")
     s.add_argument("--limit", type=int, default=0, help="deneme icin ilk N fotograf")
     s.add_argument("--isci", type=int, default=0,
-                   help="es zamanli surec sayisi (0 = otomatik, cekirdek-1, en fazla 4)")
+                   help="es zamanli surec sayisi (0 = tek surec). Olculdu: CPU'da "
+                        "coklu surec yavaslatiyor, ONNX zaten tum cekirdekleri kullaniyor.")
+    s.add_argument("--hizli", action="store_true",
+                   help="hizli tarama: dedektor 512 (olculdu %36 hizli). "
+                        "Kalabaligin arkasindaki KUCUK yuzleri kacirabilir.")
     s.set_defaults(func=cmd_scan)
 
     c = sub.add_parser("cluster", help="yuzleri kisilere gore grupla")

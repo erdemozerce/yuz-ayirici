@@ -199,6 +199,13 @@
       <button id="b-tani" onclick="baslat('tani')">Kütüphaneden tanı</button>
       <button class="tehlike gizli" id="b-durdur" onclick="durdur()">Durdur</button>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13.5px;
+                  color:var(--soluk);cursor:pointer">
+      <input type="checkbox" id="hizli" onchange="hizliDegisti()"
+             style="accent-color:var(--vurgu);width:15px;height:15px">
+      <span><b style="color:var(--yazi)">Hızlı tarama</b> — yaklaşık üçte bir daha hızlı
+      bitirir, ama kalabalığın arkasındaki küçük yüzleri kaçırabilir.</span>
+    </label>
     <div class="ipucu">
       İlk kez çalıştırıyorsan önce <b>Deneme</b> ile 300 fotoğrafa bak, gruplar doğru mu gör.
       Tarama uzun sürer (10.000 fotoğraf ≈ 5–6 saat) ama yarıda kesilirse kaldığı yerden devam eder.
@@ -346,6 +353,7 @@ async function durdur(){ await post("/api/durdur"); }
 
 async function kaynakSil(sira){ await post("/api/klasor", {tip:"kaynak_sil", sira}); durumGuncelle(); }
 async function duzenDegistir(){ await post("/api/ayar", {duzen: $("#duzen").value}); }
+async function hizliDegisti(){ await post("/api/ayar", {hizli_tarama: $("#hizli").checked}); }
 async function etiketModDegistir(){ await post("/api/ayar", {etiket_mod: $("#etiket-mod").value}); }
 async function etiketOnayla(){
   const d = await al("/api/durum");
@@ -406,6 +414,7 @@ async function durumGuncelle(){
     </div>`).join("");
   $("#duzen").value = d.ayar.duzen || "altklasor-kisi";
   $("#etiket-mod").value = d.ayar.etiket_mod || "gomulu";
+  $("#hizli").checked = !!d.ayar.hizli_tarama;
   $("#y-hedef").textContent = h || "seçilmedi";
   $("#y-hedef").className = "deger" + (h ? "" : " bos");
 

@@ -353,7 +353,8 @@ Orijinal dosyalara dokunmaz.
 `cp1252` ve Türkçe `ı/ş/ğ` harflerini **temsil edemiyor**. Denenen tüm kodlamalar
 (utf-8, cp1252, mbcs, cp1254, latin-1) başarısız oldu.
 
-Kardeşin gerçek klasörü `E:\...\8-9-10 Şubat\9. Bölümaw-jpeg` — yani metadata
+Kardeşin gerçek klasörü `E:\...\8-9-10 Şubat\9. Bölüm
+aw-jpeg` — yani metadata
 özelliği asıl arşivde **hiç çalışmayacaktı**. Testler ASCII yollarda yapıldığı için
 gözden kaçmıştı.
 
@@ -371,3 +372,25 @@ tarihi geri yazıyor.
 
 İkisi de kardeşinin klasör yapısı taklit edilerek doğrulandı
 (`8-9-10 Şubat/9. Bölüm/raw-jpeg/DSC_öçşğı_01.jpg` + `.cr2` yan dosyası).
+
+## Hız — ölçümler (v1.13.0)
+
+8 çekirdekli makinede, 40 adet ~20 MP kare ile:
+
+| ayar | foto/sn | 10.000 kare | bulunan yüz |
+|---|---|---|---|
+| varsayılan (det 640 / kenar 1600) | 1.00 | 2.8 saat | 40 |
+| **det 512** | **1.36** | **2.0 saat** | 40 |
+| kenar 1200 | 1.20 | 2.3 saat | 40 |
+
+**Çoklu süreç denendi ve VAZGEÇİLDİ.** 1 süreç 1.14 foto/sn, 4 süreç 0.86 foto/sn —
+yani yavaşlatıyor. Sebep: ONNX Runtime tek görüntü için zaten tüm çekirdekleri
+kullanıyor; süreç başına `intra_op_num_threads=1` yapınca her kare 8× yavaşlıyor ve
+4 süreç bunu telafi edemiyor. `--isci` seçeneği duruyor ama varsayılanı **1**.
+
+`--hizli` (dedektör 512) seçenek olarak eklendi, varsayılan değil: bu test setinde
+yüz kaybı olmadı ama kareler büyük ve yüzler belirgindi. Kalabalık sahnelerde arka
+plandaki küçük yüzler kaçabilir — kullanıcı bilerek seçmeli.
+
+**Gerçek büyük kazanç GPU'da.** NVIDIA kartı olan makinede `KUR.bat` otomatik olarak
+`onnxruntime-gpu` kuruyor; beklenen kazanç 5–10 kat.
