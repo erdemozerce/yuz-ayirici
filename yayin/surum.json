@@ -1,6 +1,6 @@
 {
-  "surum": "1.10.0",
-  "notlar": "Kume duzeltme: birlestir, bol, 'bu kisi degil' - hem komut satirinda hem arayuzde",
+  "surum": "1.11.0",
+  "notlar": "Secki (bulanik/gozu kapali/tekrar kare) ve sadece secilen kisileri isleme",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,17 +10,17 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "0013592c3c1e5527d556211ef93bc193dc04a43c82134d60a0730492dfaed50f"
+      "sha256": "13b8765a9cef96fd654f25fd7d70e2ce361af1468059970a2617a919919e0e5d"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "93ecfd71fd15b08d9392116f7211b4018417f4b34b191617753eefbcdb8c6947"
+      "sha256": "6f0af8c725bcf27b03eb8dc1c305824bc0ba1b8891f4bfc0863bc1fb757e5a16"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "d2a6af6b12a81f406b83bca4d554a180881fae1732dcf36c755177d59b1f41d9"
+      "sha256": "1b5d3f7ee5cd2e59331502c7ada3009902bb386f666898c10b890480eea3d2ff"
     },
     {
       "ad": "kutuphane.py",
@@ -30,7 +30,7 @@
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "b25101c75ee85e5410aeac7348bba58c7ce39a4c99af23e7b17a945120d2ae43"
+      "sha256": "783e806c735cc9c02723c74e9632d95dc028d106db1683d47643dd2601197a50"
     },
     {
       "ad": "baslat.py",

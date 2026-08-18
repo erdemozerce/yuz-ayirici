@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.10.0"
+__version__ = "1.11.0"
 
 import argparse
 import base64
@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS files(
     n_faces INTEGER,
     status  TEXT,
     kok     TEXT,
-    esler   TEXT
+    esler   TEXT,
+    imza    TEXT,
+    zaman   TEXT
 );
 CREATE TABLE IF NOT EXISTS faces(
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +71,11 @@ CREATE TABLE IF NOT EXISTS faces(
     det_score REAL,
     det_w     REAL,
     emb       BLOB,
-    cluster   INTEGER DEFAULT -1
+    cluster   INTEGER DEFAULT -1,
+    netlik    REAL,
+    goz       REAL,
+    yaw       REAL,
+    pitch     REAL
 );
 CREATE INDEX IF NOT EXISTS idx_faces_path    ON faces(path);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster ON faces(cluster);
@@ -104,6 +110,21 @@ def db_connect(path):
     if "esler" not in sutunlar:
         con.execute("ALTER TABLE files ADD COLUMN esler TEXT")
         con.commit()
+    for ad, tur in (("imza", "TEXT"), ("zaman", "TEXT")):
+        if ad not in sutunlar:
+            con.execute("ALTER TABLE files ADD COLUMN %s %s" % (ad, tur))
+    yuz_sutun = {r[1] for r in con.execute("PRAGMA table_info(faces)")}
+    for ad in ("netlik", "goz", "yaw", "pitch"):
+        if ad not in yuz_sutun:
+            con.execute("ALTER TABLE faces ADD COLUMN %s REAL" % ad)
+    con.execute("""CREATE TABLE IF NOT EXISTS secki(
+        path   TEXT PRIMARY KEY,
+        bayrak TEXT,
+        puan   REAL,
+        grup   INTEGER,
+        en_iyi INTEGER DEFAULT 0
+    )""")
+    con.commit()
     return con
 
 
@@ -232,6 +253,76 @@ def load_embeddings(con, min_score, min_face):
     return ids, X
 
 
+# --- secki olcumleri -------------------------------------------------------
+# 106 noktali modelde goz cevresi indeksleri (ampirik olarak dogrulandi:
+# ayni yuzun varyantlarinda std 0.015 -> kararli; goz daraldikca deger duser)
+SOL_GOZ = list(range(33, 43))
+SAG_GOZ = list(range(87, 97))
+
+
+def yuz_netligi(img, bbox):
+    """Yuz bolgesinin netligi (Laplacian varyansi). Bulanik kare ~10, net ~90+."""
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    h, w = img.shape[:2]
+    kirpma = img[max(y1, 0):min(y2, h), max(x1, 0):min(x2, w)]
+    if kirpma.size == 0:
+        return 0.0
+    gri = cv2.cvtColor(kirpma, cv2.COLOR_BGR2GRAY)
+    if max(gri.shape) > 200:                 # olcekten bagimsiz olsun
+        o = 200.0 / max(gri.shape)
+        gri = cv2.resize(gri, (max(int(gri.shape[1] * o), 8), max(int(gri.shape[0] * o), 8)))
+    return float(cv2.Laplacian(gri, cv2.CV_64F).var())
+
+
+def goz_aciklik(f):
+    """Goz yuksekligi / genisligi. Acik goz ~0.33, kisilmis ~0.22."""
+    lm = getattr(f, "landmark_2d_106", None)
+    if lm is None or len(lm) < 97:
+        return None
+    out = []
+    for idx in (SOL_GOZ, SAG_GOZ):
+        p = lm[idx]
+        yatay = float(p[:, 0].max() - p[:, 0].min())
+        dikey = float(p[:, 1].max() - p[:, 1].min())
+        if yatay > 1:
+            out.append(dikey / yatay)
+    return float(np.mean(out)) if out else None
+
+
+def gorsel_imza(img):
+    """dHash - neredeyse ayni kareleri bulmak icin 64 bitlik parmak izi."""
+    try:
+        gri = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        k = cv2.resize(gri, (9, 8), interpolation=cv2.INTER_AREA)
+        bit = k[:, 1:] > k[:, :-1]
+        deger = 0
+        for b in bit.flatten():
+            deger = (deger << 1) | int(b)
+        return "%016x" % deger
+    except Exception:
+        return None
+
+
+def imza_farki(a, b):
+    """Iki imza arasindaki bit farki (0 = ayni kare)."""
+    if not a or not b:
+        return 64
+    return bin(int(a, 16) ^ int(b, 16)).count("1")
+
+
+def cekim_zamani(yol):
+    try:
+        import pyexiv2
+        with pyexiv2.Image(str(yol)) as im:
+            e = im.read_exif()
+        for k in ("Exif.Photo.DateTimeOriginal", "Exif.Image.DateTime"):
+            if e.get(k):
+                return e[k]
+    except Exception:
+        pass
+    return None
+
+
 # --------------------------------------------------------------------------
 # 1) SCAN — yuzleri bul ve vektorlerini kaydet
 # --------------------------------------------------------------------------
@@ -293,23 +384,29 @@ def cmd_scan(args):
                 status = f"hata: {type(e).__name__}"
 
         rows = []
+        imza = gorsel_imza(img) if img is not None and status == "ok" else None
         for f in faces:
             bb = f.bbox.astype(float)
             det_w = float(bb[2] - bb[0])                 # islenen goruntudeki genislik
             x1, y1, x2, y2 = (bb / scale).tolist()       # orijinal koordinatlara geri
             emb = np.asarray(f.normed_embedding, dtype=np.float32)
-            rows.append((path, x1, y1, x2, y2, float(f.det_score), det_w, emb.tobytes()))
+            poz = getattr(f, "pose", None)
+            rows.append((path, x1, y1, x2, y2, float(f.det_score), det_w, emb.tobytes(),
+                         yuz_netligi(img, bb), goz_aciklik(f),
+                         float(poz[1]) if poz is not None else None,
+                         float(poz[0]) if poz is not None else None))
 
         con.execute("DELETE FROM faces WHERE path = ?", (path,))
         if rows:
             con.executemany(
-                "INSERT INTO faces(path,x1,y1,x2,y2,det_score,det_w,emb) VALUES(?,?,?,?,?,?,?,?)", rows
+                "INSERT INTO faces(path,x1,y1,x2,y2,det_score,det_w,emb,"
+                "netlik,goz,yaw,pitch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows
             )
         con.execute(
-            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok,esler) "
-            "VALUES(?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok,esler,"
+            "imza,zaman) VALUES(?,?,?,?,?,?,?,?,?)",
             (path, mtime, size, len(rows), status, kok,
-             "|".join(esler) if esler else None),
+             "|".join(esler) if esler else None, imza, cekim_zamani(path)),
         )
         n_faces_total += len(rows)
 
@@ -761,6 +858,141 @@ def cmd_cikar(args):
 # --------------------------------------------------------------------------
 # 3) REVIEW — kimin kim oldugunu gormek icin HTML + isim dosyasi
 # --------------------------------------------------------------------------
+def cmd_secki(args):
+    """Bulanik, gozu kapali ve tekrar kareleri isaretler; her seride en iyiyi secer."""
+    con = db_connect(args.db)
+    kayitlar = con.execute(
+        "SELECT f.path, f.imza, f.zaman, "
+        "  MAX(y.netlik), MAX(y.goz), MAX(y.det_score), MIN(ABS(COALESCE(y.yaw,0))), "
+        "  MAX(y.det_w) "
+        "FROM files f LEFT JOIN faces y ON y.path = f.path "
+        "WHERE f.n_faces > 0 GROUP BY f.path ORDER BY f.path").fetchall()
+    if not kayitlar:
+        print("Once tarama yapin.")
+        return
+
+    netlikler = [k[3] for k in kayitlar if k[3]]
+    if not netlikler:
+        print("Bu veritabaninda olcum yok. Yeni surumle yeniden tarayin "
+              "(eski kayitlarda netlik/goz bilgisi yok).")
+        return
+    # Bulaniklik yuzde-dilimle olculmez: oyle olsa her setin %15'i hep isaretlenirdi,
+    # hepsi net olsa bile. Mutlak taban kullanilir (olculdu: net yuz 85-135,
+    # GaussianBlur(31) uygulanmis ayni yuz 10). Kucuk yuzler dogal olarak dusuk
+    # deger verir, o yuzden yalnizca BUYUK yuzlerde bulaniklik iddia edilir.
+    net_esik = args.netlik if args.netlik > 0 else 22.0
+
+    # Goz aciklik KISIYE GORE degerlendirilir. Olculdu: bir kisinin normali 0.33
+    # iken baska birinin normali 0.14 olabiliyor (goz sekli/aci farki). Mutlak
+    # esik kullanmak o kisinin TUM karelerini "gozu kapali" sayardi.
+    kisi_goz = {}
+    try:
+        for cid, g in con.execute(
+                "SELECT cluster, goz FROM faces WHERE cluster > 0 AND goz IS NOT NULL"):
+            kisi_goz.setdefault(cid, []).append(g)
+    except Exception:
+        pass
+    kisi_taban = {cid: float(np.median(v)) for cid, v in kisi_goz.items()
+                  if len(v) >= args.min_ornek}
+    yol_kisi = {}
+    try:
+        for yol, cid in con.execute(
+                "SELECT path, cluster FROM faces WHERE cluster > 0"):
+            yol_kisi.setdefault(yol, cid)
+    except Exception:
+        pass
+    genel_goz = [k[4] for k in kayitlar if k[4]]
+    genel_taban = float(np.median(genel_goz)) if genel_goz else 0.0
+
+    def goz_dusuk_mu(yol, deger):
+        if deger is None:
+            return False
+        if args.goz > 0:                       # kullanici elle esik verdiyse
+            return deger < args.goz
+        cid = yol_kisi.get(yol)
+        taban = kisi_taban.get(cid)
+        if taban is None:
+            # Bu kisi icin yeterli ornek yok. Baskasinin ortalamasiyla kiyaslamak
+            # yanlis damga vurur (olculdu: bir kisinin normali 0.33, digerinin 0.14).
+            return False
+        return deger < taban * args.goz_orani
+
+    print()
+    print("=" * 66)
+    print("  SECKI  -  %d fotograf inceleniyor" % len(kayitlar))
+    print("=" * 66)
+    print("  Netlik esigi     : %.0f  (%s, yalniz %d px'ten buyuk yuzlerde)"
+          % (net_esik, "elle" if args.netlik > 0 else "varsayilan", args.min_yuz_px))
+    if args.goz > 0:
+        print("  Goz esigi        : %.3f (elle)" % args.goz)
+    else:
+        print("  Goz olcutu       : kisinin kendi ortalamasinin %%%.0f alti"
+              % (args.goz_orani * 100))
+        print("                     %d kisi icin taban var; taban olmayanlar "
+              "isaretlenmez" % len(kisi_taban))
+    print("  Tekrar kare farki: %d bit  (0 = birebir ayni)" % args.tekrar)
+    print("-" * 66)
+
+    # --- tekrar/seri gruplama: ayni klasorde, ardisik, gorsel olarak neredeyse ayni
+    con.execute("DELETE FROM secki")
+    grup_no = 0
+    onceki = None
+    gruplar = []
+    for k in kayitlar:
+        yol, imza = k[0], k[1]
+        ayni_klasor = onceki and os.path.dirname(onceki[0]) == os.path.dirname(yol)
+        if onceki and ayni_klasor and imza_farki(onceki[1], imza) <= args.tekrar:
+            gruplar[-1].append(k)
+        else:
+            grup_no += 1
+            gruplar.append([k])
+        onceki = k
+
+    def puan(k):
+        netlik = k[3] or 0.0
+        goz = k[4] or 0.0
+        skor = k[5] or 0.0
+        sapma = k[6] or 0.0
+        return (min(netlik / max(net_esik * 2, 1), 2.0) * 2.0
+                + min(goz / 0.33, 1.5) * 1.5
+                + skor
+                - min(abs(sapma) / 45.0, 1.0))
+
+    bulanik = goz_kapali = tekrar = 0
+    for i, g in enumerate(gruplar, 1):
+        en_iyi = max(g, key=puan)
+        for k in g:
+            bayraklar = []
+            buyuk_yuz = (k[7] or 0) >= args.min_yuz_px
+            if buyuk_yuz and k[3] is not None and k[3] < net_esik:
+                bayraklar.append("bulanik")
+            if goz_dusuk_mu(k[0], k[4]):
+                bayraklar.append("goz_kapali")
+            if len(g) > 1 and k[0] != en_iyi[0]:
+                bayraklar.append("tekrar")
+            if "bulanik" in bayraklar:
+                bulanik += 1
+            if "goz_kapali" in bayraklar:
+                goz_kapali += 1
+            if "tekrar" in bayraklar:
+                tekrar += 1
+            con.execute(
+                "INSERT OR REPLACE INTO secki(path,bayrak,puan,grup,en_iyi) VALUES(?,?,?,?,?)",
+                (k[0], ",".join(bayraklar), puan(k), i, 1 if k[0] == en_iyi[0] else 0))
+    con.commit()
+
+    seri = sum(1 for g in gruplar if len(g) > 1)
+    temiz = con.execute("SELECT COUNT(*) FROM secki WHERE bayrak = ''").fetchone()[0]
+    print("  Seri/tekrar grubu : %d  (%d kare elendi, her seride en iyi kaldi)"
+          % (seri, tekrar))
+    print("  Bulanik           : %d" % bulanik)
+    print("  Gozu kapali/kisik : %d" % goz_kapali)
+    print("  Temiz kare        : %d / %d" % (temiz, len(kayitlar)))
+    print("-" * 66)
+    print("  Klasorlemede/etikette kullanmak icin:  --secki-atla")
+    print("  Isaretler 'secki' tablosunda; bu komutu tekrar calistirmak zararsiz.")
+
+
 def cmd_review(args):
     con = db_connect(args.db)
     clusters = con.execute(
@@ -857,6 +1089,8 @@ def cmd_etiketle(args):
     print("  Bicimler   : anahtar kelime + MWG bolgeleri + ACDSee bolgeleri")
     print("  Not        : goruntu verisine dokunulmaz, mevcut etiketler korunur.")
     print("               RAW dosyalarda her zaman yan .xmp yazilir.")
+    if args.kisi:
+        print("  Kisi filtresi: %s" % ", ".join("kisi_%04d" % int(k) for k in args.kisi))
     if args.limit:
         print("  DENEME     : yalnizca ilk %d fotograf" % args.limit)
     print("=" * 66)
@@ -871,7 +1105,8 @@ def cmd_etiketle(args):
             return
     print()
     etiket.etiketle(args.db, args.names or "isimler.csv", mod=args.mod,
-                    limit=args.limit, dogrula_adet=args.dogrula)
+                    limit=args.limit, dogrula_adet=args.dogrula,
+                    kisiler=[int(k) for k in args.kisi] if args.kisi else None)
 
 
 # --------------------------------------------------------------------------
@@ -929,10 +1164,38 @@ def cmd_export(args):
                     names[int(row["kume_no"])] = nm
         print(f"{len(names)} kisi ismi okundu.")
 
+    elenen = set()
+    if getattr(args, "secki_atla", False):
+        try:
+            elenen = {r[0] for r in con.execute(
+                "SELECT path FROM secki WHERE bayrak != ''")}
+        except Exception:
+            elenen = set()
+        if elenen:
+            print("Secki: %d isaretli kare disarida birakiliyor." % len(elenen))
+        else:
+            print("Secki isareti yok - once 'secki' komutunu calistirin.")
+
+    secili = set(int(k) for k in (args.kisi or []))
+    if args.sadece_isimli:
+        adlar = isim_csv_oku(args.names or "isimler.csv")
+        isimliler = {c for c, ad in adlar.items() if ad}
+        secili = (secili & isimliler) if secili else isimliler
+        if not secili:
+            print("Isim verilmis kisi yok - once isimlendirin.")
+            return
+    if secili:
+        print("Yalnizca secilen %d kisi islenecek: %s"
+              % (len(secili), ", ".join("kisi_%04d" % c for c in sorted(secili))))
+
     groups = {}
     for cid, path in con.execute(
         "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"
     ):
+        if path in elenen:
+            continue
+        if secili and cid not in secili:
+            continue
         groups.setdefault(cid, []).append(path)
 
     if args.export_unknown:
@@ -1192,6 +1455,23 @@ def main():
     ck.add_argument("--yuz", nargs="+", required=True, help="cikarilacak yuz id'leri")
     ck.set_defaults(func=cmd_cikar)
 
+    sk = sub.add_parser("secki", help="bulanik / gozu kapali / tekrar kareleri isaretle")
+    sk.add_argument("--db", default="faces.db")
+    sk.add_argument("--netlik", type=float, default=0,
+                    help="netlik esigi (0 = otomatik, en dusuk %15)")
+    sk.add_argument("--goz", type=float, default=0,
+                    help="mutlak goz esigi (0 = kisiye gore otomatik)")
+    sk.add_argument("--goz-orani", type=float, default=0.72,
+                    help="kisinin kendi ortalamasinin bu katinin alti 'gozu kapali' "
+                         "sayilir (varsayilan 0.72)")
+    sk.add_argument("--min-yuz-px", type=float, default=120,
+                    help="bulaniklik yalnizca bu boyuttan buyuk yuzlerde iddia edilir")
+    sk.add_argument("--min-ornek", type=int, default=5,
+                    help="goz tabani icin kisi basina en az kac kare gerekli")
+    sk.add_argument("--tekrar", type=int, default=8,
+                    help="bu kadar bit fark altindaki ardisik kareler ayni sayilir")
+    sk.set_defaults(func=cmd_secki)
+
     r = sub.add_parser("review", help="kumeleri gorsel olarak incele + isim sablonu")
     r.add_argument("--db", default="faces.db")
     r.add_argument("--out", default="inceleme.html")
@@ -1234,6 +1514,8 @@ def main():
     m.add_argument("--mod", choices=["gomulu", "yan"], default="gomulu",
                    help="gomulu: dosyanin icine (ACDSee/Lightroom gorur). "
                         "yan: .xmp yan dosyasi (orijinale hic dokunulmaz)")
+    m.add_argument("--kisi", nargs="+", default=None,
+                   help="yalnizca bu kisi numaralarina isim yaz")
     m.add_argument("--limit", type=int, default=0, help="deneme icin ilk N fotograf")
     m.add_argument("--dogrula", type=int, default=5,
                    help="ilk N dosyada goruntu bozulmadi mi diye kontrol et")
@@ -1254,6 +1536,12 @@ def main():
     e.add_argument("--min-photos", type=int, default=2)
     e.add_argument("--export-unknown", action="store_true", help="_bilinmeyen klasoru de olustur")
     e.add_argument("--export-nofaces", action="store_true", help="_yuz_yok klasoru de olustur")
+    e.add_argument("--kisi", nargs="+", default=None,
+                   help="yalnizca bu kisi numaralarini isle (or: --kisi 3 7)")
+    e.add_argument("--sadece-isimli", action="store_true",
+                   help="yalnizca isim verilmis kisileri isle")
+    e.add_argument("--secki-atla", action="store_true",
+                   help="secki ile isaretlenen bulanik/tekrar/gozu kapali kareleri disarida birak")
     e.add_argument("--dry-run", action="store_true", help="dosya tasimadan sadece raporla")
     e.add_argument("--evet", action="store_true", help="onay sormadan yaz (otomasyon icin)")
     e.add_argument("--kutuphane", default=None)

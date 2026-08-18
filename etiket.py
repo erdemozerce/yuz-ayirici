@@ -232,7 +232,7 @@ def dosyaya_yaz(pyexiv2, yol, veri, mod="gomulu", dogrula=False):
 
 # --------------------------------------------------------------------------
 def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
-             log=print, sadece_isimli=True):
+             log=print, sadece_isimli=True, kisiler=None):
     """Veritabanindaki isimlendirilmis kisileri fotograflarin metadata'sina yazar."""
     pyexiv2 = hazirla()
 
@@ -248,8 +248,12 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
                         isimler[int(row["kume_no"])] = ad
                 except (KeyError, TypeError, ValueError):
                     continue
+    if kisiler:
+        secili = set(int(k) for k in kisiler)
+        isimler = {c: a for c, a in isimler.items() if c in secili}
+        log("Yalnizca secilen %d kisi icin yazilacak." % len(isimler))
     if not isimler:
-        log("isimler.csv icinde isim yok. Once kisilere isim verin.")
+        log("isimler.csv icinde (secilen kisilerde) isim yok.")
         return {"dosya": 0}
 
     con = sqlite3.connect(str(db_yolu))

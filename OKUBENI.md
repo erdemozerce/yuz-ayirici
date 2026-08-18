@@ -280,3 +280,40 @@ Düzeltmeler `duzeltmeler` tablosuna loglanır; `cluster` yeniden çalıştırı
 Arayüzde: kartlarda seçim kutusu → *Seçilenleri birleştir*; her kartta *Böl* düğmesi;
 yüz küçük resmine tıklayınca o yüz gruptan çıkar. `kume_ornekleri` artık yüz id'si de
 döndürüyor (arayüzün "bu kişi değil" işlemi için gerekli).
+
+## Seçki + kişi seçimi (v1.11.0)
+
+### Tarama sırasında ölçülenler (ek maliyet yok — model zaten üretiyor)
+
+`faces`: `netlik` (yüz bölgesinin Laplacian varyansı), `goz` (göz açıklık oranı),
+`yaw`/`pitch` (poz). `files`: `imza` (dHash), `zaman` (EXIF çekim zamanı).
+
+### Göz açıklığı — indeksler ampirik olarak bulundu
+
+106 noktalı modelde göz halkaları **33–42 (sol)** ve **87–96 (sağ)**. Doğrulama:
+aynı yüzün 10 varyantında std **0.015** (kararlı); göz bölgesi yapay olarak
+%60/%35 ezildiğinde değer 0.328 → 0.261 → 0.224 (doğru yönde).
+
+**Kişiye göre değerlendirilir.** Ölçüldü: bir kişinin normali 0.33 iken başkasınınki
+0.14 olabiliyor. Mutlak eşik o kişinin *tüm* karelerini "gözü kapalı" sayardı.
+Kişi başına en az 5 kare yoksa **hiç işaretlenmez** — yanlış damga vurmaktansa atlar.
+
+### Bulanıklık — yüzde-dilim değil, mutlak taban
+
+Yüzde-dilim kullanmak her setin %15'ini hep işaretlerdi, hepsi net olsa bile.
+Mutlak taban 22 (ölçüldü: net yüz 85–135, `GaussianBlur(31)` sonrası aynı yüz 10)
+ve yalnızca **120 px'ten büyük** yüzlerde iddia edilir — küçük yüzler doğal olarak
+düşük değer verir.
+
+### Seri/tekrar kare
+
+Aynı klasörde ardışık kareler dHash farkı ≤ 8 bit ise tek grup sayılır; grup içinde
+netlik + göz + poz + tespit skorundan bileşik puan hesaplanır, **en iyisi kalır**,
+diğerleri `tekrar` işaretlenir. Test: 4 kareli seri + 1 ayrı kare → seri doğru
+gruplandı, bulanık kare en düşük puanı aldı, en net kare seçildi.
+
+### Kişi seçimi
+
+`export` ve `etiketle` artık `--kisi 3 7` ve `--sadece-isimli` alıyor;
+`export --secki-atla` işaretli kareleri dışarıda bırakıyor. Arayüzde kartları
+işaretleyip *Sadece bunları klasörle* / *Sadece bunlara isim yaz* denebiliyor.

@@ -191,7 +191,9 @@
     </div>
     <div id="birlestir-cubugu" class="gizli">
       <span id="secim-yazi">0 kişi seçildi</span>
-      <button onclick="secilenleriBirlestir()">Seçilenleri birleştir</button>
+      <button onclick="secilenleriBirlestir()">Birleştir</button>
+      <button onclick="secilenleriKlasorle()">Sadece bunları klasörle</button>
+      <button onclick="secilenlereEtiket()">Sadece bunlara isim yaz</button>
       <button onclick="secimiTemizle()">Vazgeç</button>
     </div>
     <div class="dugmeler">
@@ -405,7 +407,8 @@ function secimDegisti(kume, kutu){
   if(kutu.checked) secilenler.add(kume); else secilenler.delete(kume);
   kutu.closest(".kisi").classList.toggle("secili", kutu.checked);
   $("#secim-yazi").textContent = secilenler.size + " kişi seçildi";
-  $("#birlestir-cubugu").classList.toggle("gizli", secilenler.size < 2);
+  document.querySelectorAll("#birlestir-cubugu button")[0].disabled = secilenler.size < 2;
+  $("#birlestir-cubugu").classList.toggle("gizli", secilenler.size < 1);
 }
 function secimiTemizle(){
   secilenler.clear();
@@ -420,6 +423,21 @@ async function secilenleriBirlestir(){
   const c = await post("/api/duzelt", {islem:"birlestir", kume: liste});
   if(c.hata) return uyar(c.hata);
   secimiTemizle();
+}
+async function secilenleriKlasorle(){
+  const liste = [...secilenler].sort((a,b)=>a-b);
+  const d = await al("/api/durum");
+  if(!d.ayar.hedef_klasor) return uyar("Önce çıktı klasörünü seçin.");
+  if(!confirm("Yalnızca seçilen " + liste.length + " kişi klasörlenecek.\n\n" +
+              "Hedef: " + d.ayar.hedef_klasor + "\n\nDevam?")) return;
+  const c = await post("/api/baslat", {adim:"klasorle", kisi: liste});
+  if(c.hata) uyar(c.hata); else secimiTemizle();
+}
+async function secilenlereEtiket(){
+  const liste = [...secilenler].sort((a,b)=>a-b);
+  if(!confirm("Yalnızca seçilen " + liste.length + " kişinin ismi fotoğraflara yazılacak.\n\nDevam?")) return;
+  const c = await post("/api/baslat", {adim:"etiketle", kisi: liste});
+  if(c.hata) uyar(c.hata); else secimiTemizle();
 }
 async function kisiBol(kume){
   const e = prompt("Bu grupta iki farklı kişi mi var? Ayırmayı deneyeceğim.\n\n" +

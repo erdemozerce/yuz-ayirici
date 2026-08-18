@@ -211,6 +211,31 @@ okumayabilir — gömülü seçenek daha güvenilir sonuç verir.)
 
 ---
 
+## 3d. Sadece belirli kişileri işlemek
+
+Her zaman herkesi arşivlemek gerekmiyor. Panelde kişi kartlarının sol üstündeki
+**kutucuğu** işaretle, alttaki çubuktan seç:
+
+- **Sadece bunları klasörle** — yalnızca işaretlediğin kişiler için klasör açar
+- **Sadece bunlara isim yaz** — yalnızca onların ismini fotoğraflara yazar
+- **Birleştir** — iki kart aynı kişiyse tek kişide toplar
+
+Diğer kişilere hiç dokunulmaz.
+
+## 3e. Kötü kareleri ayıklamak (seçki)
+
+Program bulanık kareleri, gözü kapalı yakalanmış kareleri ve arka arkaya çekilmiş
+neredeyse aynı kareleri işaretleyebiliyor. Seri çekimlerde **en net olanı** seçip
+diğerlerini eliyor.
+
+Klasörleme yaparken bu işaretlileri dışarıda bırakabilirsin — 1500 kareden 150
+seçkiye inmek bu şekilde kolaylaşır.
+
+Yanlış damga vurmamak için ölçütler temkinli: bir kişinin göz oranı sürekli düşükse
+(göz şekli/açı) o "gözü kapalı" sayılmaz, kişinin kendi ortalamasına bakılır.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:
