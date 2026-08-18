@@ -130,6 +130,15 @@
 
   <div id="uyari" class="uyari gizli"></div>
 
+  <div id="kopuk" class="uyari gizli" style="border-color:var(--sari);
+       background:rgba(240,180,41,.12);color:var(--yazi)">
+    <b>Program penceresi kapanmış.</b> Bu sayfa artık çalışmıyor — düğmeler tepki vermez.<br>
+    Tarayıcıdaki bu sekmeyi ve arkadaki siyah pencereyi kapatın, masaüstündeki
+    <b>Yüz Ayırıcı</b> kısayolundan yeniden açın.<br>
+    <span style="color:var(--soluk);font-size:12.5px">
+      (Program güncellendiyse bu normaldir — yeniden açınca yeni sürüm çalışır.)</span>
+  </div>
+
   <div class="kartlar">
     <div class="sayac"><b id="s-foto">0</b><span>fotoğraf tarandı</span></div>
     <div class="sayac"><b id="s-yuz">0</b><span>yüz bulundu</span></div>
@@ -149,9 +158,25 @@
       <button onclick="klasorSec('kaynak')">+ Klasör ekle</button>
     </div>
     <div class="satir">
+      <div class="etiket">ya da yolu yapıştır</div>
+      <input id="elle-kaynak" placeholder="E:\Fotograflar\9. Bölüm"
+             style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid var(--cizgi);
+                    background:var(--kart2);color:var(--yazi);font:inherit;font-size:13px"
+             onkeydown="if(event.key==='Enter')elleEkle('kaynak')">
+      <button onclick="elleEkle('kaynak')">Ekle</button>
+    </div>
+    <div class="satir">
       <div class="etiket">Çıktı</div>
       <div class="deger bos" id="y-hedef">seçilmedi</div>
       <button onclick="klasorSec('hedef')">Seç</button>
+    </div>
+    <div class="satir">
+      <div class="etiket">ya da yolu yapıştır</div>
+      <input id="elle-hedef" placeholder="E:\Kisiler"
+             style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid var(--cizgi);
+                    background:var(--kart2);color:var(--yazi);font:inherit;font-size:13px"
+             onkeydown="if(event.key==='Enter')elleEkle('hedef')">
+      <button onclick="elleEkle('hedef')">Ayarla</button>
     </div>
     <div class="satir">
       <div class="etiket">Çıktı düzeni</div>
@@ -284,8 +309,24 @@ function uyar(m){
 function kisalt(y){ return y.length > 58 ? "…" + y.slice(-56) : y; }
 
 async function klasorSec(tip){
-  uyar(""); const c = await post("/api/klasor", {tip});
-  if(c.yol) durumGuncelle();
+  uyar("");
+  const dugmeler = document.querySelectorAll("button");
+  try{
+    const c = await post("/api/klasor", {tip});
+    if(c && c.hata) return uyar(c.hata);
+    durumGuncelle();
+  }catch(e){
+    uyar("Program penceresi kapanmış olabilir. Masaüstündeki kısayoldan yeniden açın.");
+  }
+}
+async function elleEkle(tip){
+  const kutu = $(tip === "hedef" ? "#elle-hedef" : "#elle-kaynak");
+  const yol = (kutu.value || "").trim();
+  if(!yol) return uyar("Önce klasör yolunu yapıştırın.");
+  const c = await post("/api/klasor", {tip, yol});
+  if(c && c.hata) return uyar(c.hata);
+  kutu.value = "";
+  durumGuncelle();
 }
 async function baslat(adim, ek){
   uyar("");
@@ -332,7 +373,14 @@ async function klasorleOnayla(){
 
 async function durumGuncelle(){
   let d;
-  try{ d = await al("/api/durum"); }catch(e){ $("#rozet").textContent = "bağlantı yok"; return; }
+  try{
+    d = await al("/api/durum");
+    $("#kopuk").classList.add("gizli");
+  }catch(e){
+    $("#rozet").textContent = "bağlantı yok";
+    $("#kopuk").classList.remove("gizli");
+    return;
+  }
   const o = d.ozet;
   $("#s-foto").textContent = o.fotograf.toLocaleString("tr");
   $("#s-yuz").textContent  = o.yuz.toLocaleString("tr");

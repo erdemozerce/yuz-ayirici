@@ -1,6 +1,6 @@
 {
-  "surum": "1.12.2",
-  "notlar": "Arayuzde surum numarasi gorunuyor; yeni surum cikinca serit beliriyor ve tek tikla guncelleniyor",
+  "surum": "1.12.3",
+  "notlar": "Klasor secme penceresi one aliniyor; acilmazsa yolu elle yapistirma; sunucu kapaninca net uyari",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,17 +10,17 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "14b95dd249446e4c04ba6f460942faba6df1ad610ef5404879ee0d32112e37d9"
+      "sha256": "98f66791c9248282a3b59b8b7b8946c9b6906a07149ae25cd52c34274ba4fc77"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "8e7caef6188641ef6429c91656e81ad3f3f9165787ed6a805e83e637525080b6"
+      "sha256": "c0a0f5112b91ff412ee77921df5287d810d5e6ca2280528f25c4a0ed2c28f09e"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "fd30a8c0583e15972a242c8ad1c5eb4c2c37d5bef333e87ae61304c78c1da8a6"
+      "sha256": "2aeb2f53c379bdd8120dfac6653046a6f6344f2644b6583899d0931bb3df8ff0"
     },
     {
       "ad": "kutuphane.py",

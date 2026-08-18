@@ -45,6 +45,21 @@ doğrudan Python'u çalıştırır — günlük kullanımda da engellenmez.
 
 ## 2. Kullanım
 
+### Bir şey çalışmıyorsa önce bunu dene
+
+Düğmeler tepki vermiyorsa ya da sağ üstte **"bağlantı yok"** yazıyorsa: program
+penceresi kapanmıştır (güncelleme sonrası normaldir). Tarayıcı sekmesini ve arkadaki
+siyah pencereyi kapat, masaüstündeki **Yüz Ayırıcı** kısayolundan yeniden aç.
+
+### Klasör seçme penceresi açılmıyorsa
+
+Bazı bilgisayarlarda seçim penceresi tarayıcının arkasında kalabiliyor — görev
+çubuğuna bak, orada yanıp sönüyor olabilir. Açılmıyorsa **"ya da yolu yapıştır"**
+kutusunu kullan: Dosya Gezgini'nde klasöre gir, üstteki adres çubuğuna tıkla,
+yolu kopyala (Ctrl+C), kutuya yapıştır (Ctrl+V), **Ekle**'ye bas.
+
+
+
 Masaüstündeki **Yüz Ayırıcı** kısayoluna çift tıkla. Tarayıcıda bir panel açılır.
 
 > Arkada küçük siyah bir pencere kalır — **onu kapatma**, program orada çalışıyor.

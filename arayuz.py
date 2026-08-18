@@ -378,14 +378,31 @@ class Vekil(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
 
             hedef_mi = (tip == "hedef")
-            baslangic = (cfg.get("hedef_klasor") if hedef_mi
-                         else (cfg.get("kaynak_klasorler") or [""])[-1])
-            cevap = queue.Queue()
-            dialog_kuyrugu.put((
-                "Kisi klasorleri nereye olusturulsun?" if hedef_mi
-                else "Fotograf klasoru secin (alt klasorler de taranir)",
-                baslangic or "", cevap))
-            yol = cevap.get()
+
+            # Kullanici yolu elle yapistirdiysa pencere acmaya gerek yok
+            elle = (veri.get("yol") or "").strip().strip('"')
+            if elle:
+                if not os.path.isdir(elle):
+                    return self._json({"hata": "Boyle bir klasor yok: %s" % elle}, 400)
+                yol = str(Path(elle))
+            else:
+                baslangic = (cfg.get("hedef_klasor") if hedef_mi
+                             else (cfg.get("kaynak_klasorler") or [""])[-1])
+                cevap = queue.Queue()
+                dialog_kuyrugu.put((
+                    "Kisi klasorleri nereye olusturulsun?" if hedef_mi
+                    else "Fotograf klasoru secin (alt klasorler de taranir)",
+                    baslangic or "", cevap))
+                try:
+                    yol = cevap.get(timeout=300)
+                except queue.Empty:
+                    return self._json(
+                        {"hata": "Klasor secme penceresi acilamadi. "
+                                 "Yolu asagidaki kutuya elle yapistirabilirsiniz."}, 500)
+                if yol is None:
+                    return self._json(
+                        {"hata": "Klasor secme penceresi bu bilgisayarda calismiyor. "
+                                 "Yolu asagidaki kutuya elle yapistirin."}, 500)
             if yol:
                 if hedef_mi:
                     cfg["hedef_klasor"] = yol
@@ -547,13 +564,28 @@ def main():
             from tkinter import filedialog
             kok = tk.Tk()
             kok.withdraw()
+            # Pencere tarayicinin ARKASINDA kalmasin: gorunur yap, one al, odagi zorla
             kok.attributes("-topmost", True)
-            secim = filedialog.askdirectory(title=baslik, initialdir=mevcut or str(Path.home()))
-            kok.destroy()
+            kok.update_idletasks()
+            kok.deiconify()
+            kok.geometry("1x1+0+0")
+            kok.lift()
+            try:
+                kok.focus_force()
+            except Exception:
+                pass
+            kok.withdraw()
+            secim = filedialog.askdirectory(
+                title=baslik, initialdir=mevcut or str(Path.home()), parent=kok)
+            try:
+                kok.destroy()
+            except Exception:
+                pass
             if secim:
                 yol = str(Path(secim))
-        except Exception:
-            yol = ""
+        except Exception as _e:
+            print("Klasor penceresi acilamadi:", _e)
+            yol = None            # arayuz elle giris istesin
         cevap.put(yol)
 
 
