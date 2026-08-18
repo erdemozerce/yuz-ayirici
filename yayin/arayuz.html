@@ -217,6 +217,14 @@
 
   <div class="kart">
     <h2>3 · Kişiler <span id="kisi-sayisi" style="color:var(--soluk);font-weight:400"></span></h2>
+    <div id="secim-ipucu" class="gizli" style="background:var(--kart2);border:1px solid var(--cizgi);
+         border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--soluk)">
+      <b style="color:var(--yazi)">Herkesi işlemek zorunda değilsin.</b>
+      Kartların sol üstündeki <span style="display:inline-block;width:13px;height:13px;
+      border:2px solid var(--vurgu);border-radius:3px;vertical-align:-2px"></span> kutucuğu işaretle —
+      altta çıkan çubuktan <b>yalnızca seçtiğin kişileri</b> klasörleyebilir, isimlendirebilir
+      ya da iki kartı birleştirebilirsin.
+    </div>
     <div id="kisiler-alan">
       <div class="bos-durum">
         <div class="ikon">👥</div>
@@ -225,6 +233,7 @@
     </div>
     <div id="birlestir-cubugu" class="gizli">
       <span id="secim-yazi">0 kişi seçildi</span>
+      <span style="opacity:.85;font-size:12.5px">— yalnızca bunlara işlem yapılacak</span>
       <button onclick="secilenleriBirlestir()">Birleştir</button>
       <button onclick="secilenleriKlasorle()">Sadece bunları klasörle</button>
       <button onclick="secilenlereEtiket()">Sadece bunlara isim yaz</button>
@@ -466,6 +475,7 @@ async function kisileriYukle(){
   try{ d = await al("/api/kisiler"); }catch(e){ alan.innerHTML = ""; return; }
   const ks = d.kisiler || [];
   $("#kisi-sayisi").textContent = ks.length ? "· " + ks.length + " kişi" : "";
+  $("#secim-ipucu").classList.toggle("gizli", !ks.length);
   if(!ks.length){
     const d2 = await al("/api/durum");
     const tarandi = (d2.ozet && d2.ozet.fotograf) ? d2.ozet.fotograf : 0;

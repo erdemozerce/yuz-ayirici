@@ -1,6 +1,6 @@
 {
-  "surum": "1.12.3",
-  "notlar": "Klasor secme penceresi one aliniyor; acilmazsa yolu elle yapistirma; sunucu kapaninca net uyari",
+  "surum": "1.12.4",
+  "notlar": "Kisi secimi (yalnizca secilenleri klasorle/isimlendir) arayuzde gorunur hale getirildi",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "98f66791c9248282a3b59b8b7b8946c9b6906a07149ae25cd52c34274ba4fc77"
+      "sha256": "01643d993c39fab8cca0378c4a61239babe0e3793dfaa72050929ed3ca2762fd"
     },
     {
       "ad": "arayuz.py",
@@ -20,7 +20,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "2aeb2f53c379bdd8120dfac6653046a6f6344f2644b6583899d0931bb3df8ff0"
+      "sha256": "450505713fd5de26cd8ddb8eb48bfc401209a4ab88808011623887d5ac3cffbf"
     },
     {
       "ad": "kutuphane.py",
