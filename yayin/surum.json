@@ -1,16 +1,21 @@
 {
-  "surum": "1.1.0",
-  "notlar": "exFAT/NTFS otomatik algilama, yazma oncesi klasor onayi ve ozet ekrani",
+  "surum": "1.2.0",
+  "notlar": "Internetten isim onerisi (Google Vision), Turkce karakter hatasi duzeltildi",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "85ce8905f07e58ef6714296b3160b38fefcc3af6f189394ee40872a28622a493"
+      "sha256": "ca090a4315788956bd98313bbb96525997c9d18c6d2ceba4d661d2e25c9ce8fa"
+    },
+    {
+      "ad": "tanima.py",
+      "url": "tanima.py",
+      "sha256": "f67288e1b8d4822d014e25a2d191456d92f03c0d1896cc6ccef6cea0495ade5a"
     },
     {
       "ad": "baslat.py",
       "url": "baslat.py",
-      "sha256": "590964bd0e1d0f11867ab10d5001c69184619ee394176f6e0d655679890c6436"
+      "sha256": "523ac27e7b8f46fea4fa8822297aa9abad69f6a26a91f5bea8704f55aed23454"
     },
     {
       "ad": "guncelle.py",

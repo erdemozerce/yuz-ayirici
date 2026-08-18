@@ -11,3 +11,5 @@ yedek/
 __pycache__/
 .guncelleme_gecici/
 *.zip
+# API anahtari - asla yayinlanmaz
+google_anahtar.txt

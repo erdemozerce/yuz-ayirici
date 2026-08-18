@@ -30,6 +30,7 @@ YAYIN = BASE / "yayin"
 # calisirken degistirilmeleri Windows'ta sorun cikarir.
 DOSYALAR = [
     "face_sorter.py",
+    "tanima.py",
     "baslat.py",
     "guncelle.py",
     "kurulum_testi.py",

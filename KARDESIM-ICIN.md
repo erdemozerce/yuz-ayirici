@@ -80,6 +80,30 @@ Klasörler `0001_Ahmet`, `0002_Ayşe` şeklinde yeniden oluşur.
 
 ---
 
+## 3b. İsimleri internetten buldurmak (isteğe bağlı)
+
+Fotoğraflarındaki kişiler tanınmış isimlerse, program onları internetten arayıp
+sana **isim önerebilir**. Menüden:
+
+- **10)** İsimleri internetten bul — her kişi için 3 kare Google'a sorulur
+- **11)** Önerilen isimleri onayla — tek tek geçer, Enter'a basınca öneriyi kabul eder
+
+Öneriler asla doğrudan klasöre yazılmaz. Sen onaylamadan hiçbir klasör isimlenmez.
+
+**Kurulum (bir kere):**
+1. `console.cloud.google.com` → yeni proje
+2. "Cloud Vision API" servisini etkinleştir
+3. APIs & Services → Credentials → Create credentials → API key
+4. Anahtarı program klasöründeki `google_anahtar.txt` dosyasına yapıştır (tek satır)
+
+Ayda ilk 1000 sorgu ücretsiz. 50 kişilik bir arşiv ≈ 150 sorgu, yani muhtemelen bedava.
+
+⚠️ **Bunu bilerek yap:** bu adımda kişi başına 3 yüz kırpması Google'a gönderilir.
+Programın geri kalanı tamamen internetsiz çalışır, fotoğrafların hiçbir yere gitmez.
+Bu özelliği hiç kullanmazsan da program eksiksiz çalışır — isimleri elle de yazabilirsin.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Menüden **5**'e bas ve şu ayarı değiştir:

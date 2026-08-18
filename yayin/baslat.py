@@ -205,6 +205,8 @@ def menu():
         print("   7) Klasorlere ayir")
         print("   8) Deneme turu (ilk 300 fotograf)")
         print("   9) Guncellemeleri kontrol et")
+        print("  10) Isimleri internetten bul (Google Vision)")
+        print("  11) Onerilen isimleri onayla / duzelt")
         print("   0) Cikis")
         s = input("\nSeciminiz: ").strip()
 
@@ -262,6 +264,10 @@ def menu():
                 print("Once 1 ile klasor secin.")
         elif s == "9":
             guncelleme_bak(sessiz=False)
+        elif s == "10":
+            calistir("isimlendir", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
+        elif s == "11":
+            calistir("onayla", "--db", cfg["db"], "--names", str(BASE / "isimler.csv"))
         elif s == "0":
             return
         else:

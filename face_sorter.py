@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import argparse
 import base64
@@ -34,6 +34,14 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
+# Windows konsolu varsayilan olarak Turkce/Kiril karakterleri basamaz ve
+# program cokerdi (UnicodeEncodeError). Ciktiyi UTF-8'e sabitliyoruz.
+for _akis in (sys.stdout, sys.stderr):
+    try:
+        _akis.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".heic", ".heif"}
 
@@ -56,6 +64,14 @@ CREATE TABLE IF NOT EXISTS faces(
 );
 CREATE INDEX IF NOT EXISTS idx_faces_path    ON faces(path);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster ON faces(cluster);
+CREATE TABLE IF NOT EXISTS oneriler(
+    cluster   INTEGER PRIMARY KEY,
+    onerilen  TEXT,
+    puan      REAL,
+    ornek     INTEGER,
+    toplam    INTEGER,
+    sayfalar  TEXT
+);
 """
 
 
@@ -268,6 +284,256 @@ def cmd_cluster(args):
         print(f"  kisi_{cid:04d}  {cnt:5d} yuz  {ph:5d} fotograf")
 
 
+def kume_ornekleri(con, cid, adet):
+    """Bir kumenin merkezine en yakin (en temsili) yuzlerini dondurur."""
+    rows = con.execute(
+        "SELECT path,x1,y1,x2,y2,emb FROM faces WHERE cluster = ?", (cid,)
+    ).fetchall()
+    if not rows:
+        return []
+    E = np.vstack([np.frombuffer(r[5], np.float32) for r in rows])
+    E = E / (np.linalg.norm(E, axis=1, keepdims=True) + 1e-9)
+    merkez = E.mean(axis=0)
+    merkez /= np.linalg.norm(merkez) + 1e-9
+    sira = np.argsort(-(E @ merkez))[:adet]
+    return [rows[i][:5] for i in sira]
+
+
+def yuz_kirp_jpeg(kayit, marj=1.1, hedef=900, kalite=88):
+    """Yuzu bol paylı kirpar, JPEG baytlari dondurur. Okunamazsa None."""
+    p, x1, y1, x2, y2 = kayit
+    img = imread_unicode(p)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    gen = x2 - x1
+    yuk = y2 - y1
+    cx1 = max(int(x1 - gen * marj), 0)
+    cy1 = max(int(y1 - yuk * marj * 0.8), 0)
+    cx2 = min(int(x2 + gen * marj), w)
+    cy2 = min(int(y2 + yuk * marj * 1.4), h)
+    kirpma = img[cy1:cy2, cx1:cx2]
+    if kirpma.size == 0:
+        return None
+    k = max(kirpma.shape[:2])
+    if k > hedef:
+        o = hedef / k
+        kirpma = cv2.resize(kirpma, (int(kirpma.shape[1] * o), int(kirpma.shape[0] * o)),
+                            interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, kalite])
+    return buf.tobytes() if ok else None
+
+
+def isim_csv_oku(yol):
+    """Kullanicinin yazdigi kesin isimleri okur (varsa)."""
+    mevcut = {}
+    if yol and Path(yol).exists():
+        try:
+            with open(yol, newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh, delimiter=";"):
+                    try:
+                        mevcut[int(row["kume_no"])] = (row.get("isim") or "").strip()
+                    except (KeyError, TypeError, ValueError):
+                        continue
+        except OSError:
+            pass
+    return mevcut
+
+
+def isim_csv_yaz(con, yol):
+    """isimler.csv dosyasini yeniden yazar; kullanicinin yazdigi isimleri KORUR."""
+    mevcut = isim_csv_oku(yol)
+    kumeler = con.execute(
+        "SELECT cluster, COUNT(DISTINCT path), COUNT(*) FROM faces WHERE cluster > 0 "
+        "GROUP BY cluster ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    oner = {r[0]: r for r in con.execute(
+        "SELECT cluster, onerilen, puan, ornek, toplam FROM oneriler")}
+    with open(yol, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.writer(fh, delimiter=";")
+        w.writerow(["kume_no", "fotograf_sayisi", "onerilen_isim", "guven", "isim"])
+        for cid, nfoto, _ in kumeler:
+            o = oner.get(cid)
+            guven = "%d/%d kare" % (o[3], o[4]) if o and o[1] else ""
+            w.writerow([cid, nfoto, (o[1] if o else "") or "", guven, mevcut.get(cid, "")])
+    return len(kumeler)
+
+
+# --------------------------------------------------------------------------
+# 3b) IDENTIFY - internetten isim onerisi (Google Vision web detection)
+# --------------------------------------------------------------------------
+def cmd_identify(args):
+    import tanima
+
+    con = db_connect(args.db)
+    anahtar = tanima.anahtar_bul(Path(__file__).resolve().parent)
+    if not anahtar:
+        print(tanima.anahtar_yardimi())
+        return
+
+    kumeler = [
+        (cid, nfoto) for cid, nfoto in con.execute(
+            "SELECT cluster, COUNT(DISTINCT path) FROM faces WHERE cluster > 0 "
+            "GROUP BY cluster ORDER BY COUNT(*) DESC")
+        if nfoto >= args.min_photos
+    ]
+    if not args.yeniden:
+        var = {r[0] for r in con.execute("SELECT cluster FROM oneriler WHERE onerilen IS NOT NULL")}
+        kumeler = [k for k in kumeler if k[0] not in var]
+    if args.limit:
+        kumeler = kumeler[: args.limit]
+    if not kumeler:
+        print("Sorgulanacak yeni kume yok. (--yeniden ile hepsini tekrar sorgulayabilirsiniz)")
+        return
+
+    sorgu = len(kumeler) * args.samples
+    print()
+    print("=" * 64)
+    print("  INTERNETTEN ISIM ONERISI  -  Google Cloud Vision")
+    print("=" * 64)
+    print("  Sorgulanacak kisi : %d" % len(kumeler))
+    print("  Kisi basina kare  : %d" % args.samples)
+    print("  Toplam sorgu      : %d" % sorgu)
+    print("  Tahmini maliyet   : ~$%.2f  (aylik ilk 1000 sorgu ucretsiz)" % (sorgu * 0.0035))
+    print("-" * 64)
+    print("  DIKKAT: bu adimda kisi basina %d yuz kirpmasi Google'a GONDERILIR." % args.samples)
+    print("  Diger tum adimlar internetsiz calisir. Arsivin tamami gonderilmez.")
+    print("  Gelen isimler sadece ONERIDIR; siz onaylamadan klasor isimlenmez.")
+    print("=" * 64)
+    if not args.evet:
+        try:
+            c = input("\n  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
+        except EOFError:
+            c = "h"
+        if c not in ("", "e", "evet", "y", "yes"):
+            print("  Iptal edildi - hicbir sorgu yapilmadi.")
+            return
+
+    print()
+    bulunan = hata = 0
+    for sira, (cid, nfoto) in enumerate(kumeler, 1):
+        ornekler = kume_ornekleri(con, cid, args.samples)
+        puanlar, gorulme, sayfalar, kullanilan = {}, {}, [], 0
+        for kayit in ornekler:
+            jpeg = yuz_kirp_jpeg(kayit)
+            if jpeg is None:
+                continue
+            try:
+                wd = tanima.web_tespiti(jpeg, anahtar)
+            except RuntimeError as e:
+                print("  !! %s" % e)
+                hata += 1
+                if hata >= 3 and bulunan == 0:
+                    print("  Ust uste hata alindi, duruldu. Anahtari/API ayarini kontrol edin.")
+                    return
+                continue
+            kullanilan += 1
+            for ad, p in tanima.adaylari_puanla(wd).items():
+                puanlar[ad] = puanlar.get(ad, 0.0) + p
+                gorulme[ad] = gorulme.get(ad, 0) + 1
+            sayfalar.extend(tanima.sayfa_ornekleri(wd, 2))
+
+        en_iyi, puan = "", 0.0
+        if puanlar:
+            en_iyi = max(puanlar, key=lambda a: (gorulme[a], puanlar[a]))
+            puan = puanlar[en_iyi]
+        yeterli = (
+            en_iyi
+            and puan >= args.esik
+            and (gorulme.get(en_iyi, 0) >= 2 or kullanilan <= 1)
+        )
+        if yeterli:
+            bulunan += 1
+            con.execute(
+                "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
+                "VALUES(?,?,?,?,?,?)",
+                (cid, en_iyi, puan, gorulme.get(en_iyi, 0), kullanilan, " | ".join(sayfalar[:3])),
+            )
+            print("  [%d/%d] kisi_%04d (%d foto) -> %s  (%d/%d karede, puan %.1f)"
+                  % (sira, len(kumeler), cid, nfoto, en_iyi,
+                     gorulme.get(en_iyi, 0), kullanilan, puan))
+        else:
+            con.execute(
+                "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
+                "VALUES(?,?,?,?,?,?)",
+                (cid, None, puan, 0, kullanilan, " | ".join(sayfalar[:3])),
+            )
+            print("  [%d/%d] kisi_%04d (%d foto) -> isim bulunamadi"
+                  % (sira, len(kumeler), cid, nfoto))
+        con.commit()
+
+    yol = args.names or "isimler.csv"
+    isim_csv_yaz(con, yol)
+    print()
+    print("%d kisi icin isim onerildi. Oneriler %s dosyasina yazildi." % (bulunan, yol))
+    print("Onaylamak icin: python face_sorter.py onayla --db %s" % args.db)
+
+
+# --------------------------------------------------------------------------
+# 3c) ONAYLA - onerileri tek tek gozden gecir
+# --------------------------------------------------------------------------
+def cmd_confirm(args):
+    con = db_connect(args.db)
+    yol = args.names or "isimler.csv"
+    isim_csv_yaz(con, yol)
+    mevcut = isim_csv_oku(yol)
+
+    kumeler = con.execute(
+        "SELECT cluster, COUNT(DISTINCT path) FROM faces WHERE cluster > 0 "
+        "GROUP BY cluster ORDER BY COUNT(*) DESC"
+    ).fetchall()
+    oner = {r[0]: r for r in con.execute(
+        "SELECT cluster, onerilen, puan, ornek, toplam FROM oneriler")}
+
+    print()
+    print("Her kisi icin: Enter = oneriyi kabul et, isim yaz = duzelt,")
+    print("'-' = bos birak, 'q' = kaydet ve cik.")
+    print("Yuzleri gormek icin inceleme.html sayfasini acik tutun.")
+    print("-" * 64)
+
+    for cid, nfoto in kumeler:
+        if mevcut.get(cid) and not args.hepsi:
+            continue
+        o = oner.get(cid)
+        onerilen = (o[1] if o else "") or ""
+        etiket = "kisi_%04d  (%d fotograf)" % (cid, nfoto)
+        if onerilen:
+            print("\n%s\n   oneri: %s   (%d/%d karede)" % (etiket, onerilen, o[3], o[4]))
+        else:
+            print("\n%s\n   oneri yok" % etiket)
+        try:
+            c = input("   isim: ").strip()
+        except EOFError:
+            break
+        if c.lower() == "q":
+            break
+        if c == "-":
+            mevcut[cid] = ""
+        elif c:
+            mevcut[cid] = c
+        elif onerilen:
+            mevcut[cid] = onerilen
+
+    # kullanicinin verdigi isimleri csv'ye isle
+    isim_csv_yaz(con, yol)
+    satirlar = []
+    with open(yol, newline="", encoding="utf-8-sig") as fh:
+        okuyucu = csv.DictReader(fh, delimiter=";")
+        basliklar = okuyucu.fieldnames
+        for row in okuyucu:
+            k = int(row["kume_no"])
+            row["isim"] = mevcut.get(k, row.get("isim", ""))
+            satirlar.append(row)
+    with open(yol, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=basliklar, delimiter=";")
+        w.writeheader()
+        w.writerows(satirlar)
+
+    dolu = sum(1 for v in mevcut.values() if v)
+    print("\n%d kisiye isim verildi -> %s" % (dolu, yol))
+    print("Klasorleri bu isimlerle olusturmak icin 'export' adimini tekrar calistirin.")
+
+
 # --------------------------------------------------------------------------
 # 3) REVIEW — kimin kim oldugunu gormek icin HTML + isim dosyasi
 # --------------------------------------------------------------------------
@@ -282,6 +548,10 @@ def cmd_review(args):
         return
     if args.max_clusters:
         clusters = clusters[: args.max_clusters]
+
+    oneriler = {r[0]: (r[1], r[2], r[3]) for r in con.execute(
+        "SELECT cluster, onerilen, ornek, toplam FROM oneriler")}
+    isimler = isim_csv_oku(Path(args.out).with_name("isimler.csv"))
 
     parts = [
         "<meta charset='utf-8'><title>Yuz kumeleri</title>",
@@ -322,8 +592,15 @@ def cmd_review(args):
                 thumbs.append(
                     f"<img src='data:image/jpeg;base64,{base64.b64encode(buf).decode()}'>"
                 )
+        o = oneriler.get(cid)
+        ek = ""
+        if o and o[0]:
+            ek = (f" &nbsp;·&nbsp; <span style='color:#6cf'>oneri: {o[0]}</span>"
+                  f" <span style='color:#888;font-size:12px'>({o[1]}/{o[2]} karede)</span>")
+        if isimler.get(cid):
+            ek += f" &nbsp;·&nbsp; <span style='color:#7d7'>isim: {isimler[cid]}</span>"
         parts.append(
-            f"<div class='k'><h2>kisi_{cid:04d} &nbsp;—&nbsp; {n_photo} fotograf, {n_face} yuz</h2>"
+            f"<div class='k'><h2>kisi_{cid:04d} &nbsp;—&nbsp; {n_photo} fotograf, {n_face} yuz{ek}</h2>"
             + "".join(thumbs)
             + "</div>"
         )
@@ -331,13 +608,9 @@ def cmd_review(args):
     Path(args.out).write_text("\n".join(parts), encoding="utf-8")
 
     csv_path = Path(args.out).with_name("isimler.csv")
-    if not csv_path.exists() or args.overwrite_names:
-        with open(csv_path, "w", newline="", encoding="utf-8-sig") as fh:
-            w = csv.writer(fh, delimiter=";")
-            w.writerow(["kume_no", "fotograf_sayisi", "isim"])
-            for cid, n_face, n_photo in clusters:
-                w.writerow([cid, n_photo, ""])
-        print(f"Isim sablonu yazildi: {csv_path}")
+    isim_csv_yaz(con, csv_path)
+    print(f"Isim dosyasi guncellendi: {csv_path}")
+
     print(f"Inceleme sayfasi hazir: {args.out}  (tarayicida ac)")
 
 
@@ -438,6 +711,7 @@ def cmd_export(args):
                 pass
 
     dst = Path(args.dst)
+    zaten_vardi = dst.exists()
     dst.mkdir(parents=True, exist_ok=True)
 
     # --------------------------------------------- yontem ve yer kontrolu
@@ -485,6 +759,11 @@ def cmd_export(args):
 
     if args.dry_run:
         print("  (deneme modu: hicbir dosya yazilmadi)")
+        if not zaten_vardi:
+            try:
+                dst.rmdir()   # deneme modunda klasor de birakilmaz
+            except OSError:
+                pass
         return
 
     if not args.evet:
@@ -565,6 +844,23 @@ def main():
     r.add_argument("--max-clusters", type=int, default=0)
     r.add_argument("--overwrite-names", action="store_true")
     r.set_defaults(func=cmd_review)
+
+    i = sub.add_parser("isimlendir", help="internetten isim onerisi al (Google Vision)")
+    i.add_argument("--db", default="faces.db")
+    i.add_argument("--names", default="isimler.csv")
+    i.add_argument("--samples", type=int, default=3, help="kisi basina sorgulanacak kare")
+    i.add_argument("--min-photos", type=int, default=3, help="bu kadar fotografta gorunmeyeni sorma")
+    i.add_argument("--esik", type=float, default=2.5, help="oneri kabul esigi")
+    i.add_argument("--limit", type=int, default=0, help="sadece ilk N kisiyi sorgula (deneme)")
+    i.add_argument("--yeniden", action="store_true", help="daha once sorulanlari tekrar sor")
+    i.add_argument("--evet", action="store_true", help="onay sormadan basla")
+    i.set_defaults(func=cmd_identify)
+
+    o = sub.add_parser("onayla", help="onerilen isimleri tek tek onayla/duzelt")
+    o.add_argument("--db", default="faces.db")
+    o.add_argument("--names", default="isimler.csv")
+    o.add_argument("--hepsi", action="store_true", help="ismi olanlari da tekrar sor")
+    o.set_defaults(func=cmd_confirm)
 
     e = sub.add_parser("export", help="kisi klasorlerini olustur")
     e.add_argument("--db", default="faces.db")

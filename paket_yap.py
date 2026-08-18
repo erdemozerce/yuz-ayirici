@@ -25,6 +25,7 @@ ICERIK = [
     "GUNCELLE.bat",
     "KARDESIM-ICIN.md",
     "face_sorter.py",
+    "tanima.py",
     "baslat.py",
     "guncelle.py",
     "kurulum_testi.py",
