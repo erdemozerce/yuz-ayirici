@@ -59,6 +59,17 @@ Panelde dört bölüm var:
 | **3 · Kişiler** | Her kişinin yüzlerini görür, kutuya ismini yazarsın |
 | **4 · Klasörleme** | *Önce hesapla* ile yer ihtiyacını görür, sonra klasörleri oluşturursun |
 
+### RAW dosyalar
+
+Program artık **CR2, CR3, NEF, ARW, RAF, RW2, ORF, DNG** ve diğer ham dosyaları da
+okuyor. Ham dosyayı çözmek yerine içindeki hazır önizlemeyi kullanıyor — hem tam
+çözünürlükte hem de çok hızlı.
+
+**Aynı karenin hem RAW hem JPEG kopyası varsa** (klasik `raw-jpeg` klasörleri) program
+bunu anlıyor: kareyi **bir kez** tarıyor, ama klasörlemede ve isim yazmada **ikisini
+birden** işliyor. Yani kişi klasöründe hem `KARE_001.jpg` hem `KARE_001.cr2` bulunur,
+kişi sayıları da iki katına çıkmaz.
+
 ### Birden fazla klasör
 
 **+ Klasör ekle** ile istediğin kadar ana klasör ekleyebilirsin. Her klasörün

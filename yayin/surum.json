@@ -1,6 +1,6 @@
 {
-  "surum": "1.8.1",
-  "notlar": "Akilli Uygulama Denetimi uyumu: .bat gerektirmeyen kurulum (kur.py) ve imzali python.exe kisayolu",
+  "surum": "1.9.0",
+  "notlar": "RAW destegi (CR2/NEF/ARW/DNG...) gomulu onizleme ile; ayni karenin RAW+JPEG cifti bir kez taranip birlikte isleniyor",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "e89b97203f382c790aca25f0193005b2975f7ad0564b5f018a896dd80fb9bac2"
+      "sha256": "e59e041849885593005af82b6868f2106979ea43d171170815d1b9b120a22add"
     },
     {
       "ad": "arayuz.py",
@@ -30,7 +30,7 @@
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "f7d07242bd93ea194bb4612b2fe33afbca791f9e6400117e68e97fe69935d9e0"
+      "sha256": "b25101c75ee85e5410aeac7348bba58c7ce39a4c99af23e7b17a945120d2ae43"
     },
     {
       "ad": "baslat.py",
@@ -50,7 +50,7 @@
     {
       "ad": "gereksinimler.txt",
       "url": "gereksinimler.txt",
-      "sha256": "ce12f7ddce9a4d80e3bf252f1b40a01bcb87acf05bbcaa458bb7df581e8c2506"
+      "sha256": "dd96d30a75e707022d39b3a873c598edb24df566bef1155b24b6723c0c3aab52"
     }
   ]
 }

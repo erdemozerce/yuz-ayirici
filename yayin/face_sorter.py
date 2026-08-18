@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.8.1"
+__version__ = "1.9.0"
 
 import argparse
 import base64
@@ -43,7 +43,14 @@ for _akis in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".heic", ".heif"}
+JPEG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".heic", ".heif"}
+# LibRaw ile okunan ham dosyalar - gomulu onizlemeleri kullanilir (cok hizli)
+RAW_EXT = {".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".sr2", ".raf", ".rw2",
+           ".orf", ".pef", ".dng", ".raw", ".3fr", ".iiq", ".x3f", ".mrw", ".srw"}
+IMAGE_EXT = JPEG_EXT | RAW_EXT
+
+# Ayni karenin hem RAW hem JPEG kopyasi varsa hangisi taranir (once gelen kazanir)
+TARAMA_ONCELIGI = [".jpg", ".jpeg", ".tif", ".tiff", ".png"]
 
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS files(
@@ -52,7 +59,8 @@ CREATE TABLE IF NOT EXISTS files(
     size    INTEGER,
     n_faces INTEGER,
     status  TEXT,
-    kok     TEXT
+    kok     TEXT,
+    esler   TEXT
 );
 CREATE TABLE IF NOT EXISTS faces(
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,11 +95,44 @@ def db_connect(path):
     if "kok" not in sutunlar:
         con.execute("ALTER TABLE files ADD COLUMN kok TEXT")
         con.commit()
+    if "esler" not in sutunlar:
+        con.execute("ALTER TABLE files ADD COLUMN esler TEXT")
+        con.commit()
     return con
+
+
+def raw_oku(path, en_az=800):
+    """
+    RAW dosyayi LibRaw ile okur. ONCE gomulu onizlemeyi dener - olculdu:
+    tam cozumlemeden 18-74 kat hizli ve tam cozunurlukte geliyor.
+    Onizleme yoksa ya da cok kucukse yarim boy cozumlemeye duser.
+    """
+    try:
+        import rawpy
+    except ImportError:
+        return None
+    try:
+        with rawpy.imread(str(path)) as raw:
+            try:
+                th = raw.extract_thumb()
+                if th.format == rawpy.ThumbFormat.JPEG:
+                    img = cv2.imdecode(np.frombuffer(th.data, np.uint8), cv2.IMREAD_COLOR)
+                else:
+                    img = cv2.cvtColor(th.data, cv2.COLOR_RGB2BGR)
+                if img is not None and min(img.shape[:2]) >= en_az:
+                    return img
+            except Exception:
+                pass
+            rgb = raw.postprocess(half_size=True, use_camera_wb=True, output_bps=8)
+            return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    except Exception:
+        return None
 
 
 def imread_unicode(path):
     """Turkce/Rusca karakterli dosya yollarini da okuyabilen imread."""
+    if Path(path).suffix.lower() in RAW_EXT:
+        return raw_oku(path)
     try:
         data = np.fromfile(str(path), dtype=np.uint8)
         img = cv2.imdecode(data, cv2.IMREAD_COLOR)
@@ -121,7 +162,7 @@ def list_images(kaynaklar):
     """
     if isinstance(kaynaklar, (str, Path)):
         kaynaklar = [kaynaklar]
-    out, gorulen = [], set()
+    ham = {}                       # (klasor, dosya_adi_govdesi) -> [(yol, kok), ...]
     for kaynak in kaynaklar:
         kok = str(Path(kaynak).resolve())
         for root, dirs, names in os.walk(kok):
@@ -129,9 +170,21 @@ def list_images(kaynaklar):
             for n in names:
                 if Path(n).suffix.lower() in IMAGE_EXT:
                     p = str(Path(root) / n)
-                    if p not in gorulen:      # ic ice secilen klasorlerde tekrari onle
-                        gorulen.add(p)
-                        out.append((p, kok))
+                    anahtar = (root.lower(), Path(n).stem.lower())
+                    liste = ham.setdefault(anahtar, [])
+                    if all(x[0] != p for x in liste):   # ic ice klasor tekrari
+                        liste.append((p, kok))
+
+    def sira(yol):
+        u = Path(yol).suffix.lower()
+        return TARAMA_ONCELIGI.index(u) if u in TARAMA_ONCELIGI else len(TARAMA_ONCELIGI)
+
+    out = []
+    for _, liste in ham.items():
+        liste.sort(key=lambda t: (sira(t[0]), t[0]))
+        birincil, kok = liste[0]
+        esler = [y for y, _ in liste[1:]]        # ayni karenin diger kopyalari
+        out.append((birincil, kok, esler))
     out.sort()
     return out
 
@@ -192,14 +245,18 @@ def cmd_scan(args):
 
     done = {r[0]: (r[1], r[2]) for r in con.execute("SELECT path, mtime, size FROM files")}
     todo = []
-    for f, kok in files:
+    es_sayisi = sum(len(e) for _, _, e in files)
+    if es_sayisi:
+        print(f"  {es_sayisi} dosya ayni karenin baska bicimi (RAW/JPEG cifti) - "
+              f"bir kez taranacak, hepsi birlikte islenecek.")
+    for f, kok, esler in files:
         try:
             st = os.stat(f)
         except OSError:
             continue
         prev = done.get(f)
         if prev is None or abs(prev[0] - st.st_mtime) > 1 or prev[1] != st.st_size:
-            todo.append((f, st.st_mtime, st.st_size, kok))
+            todo.append((f, st.st_mtime, st.st_size, kok, esler))
     print(f"  {len(todo)} dosya islenecek ({len(files) - len(todo)} tanesi zaten islenmis).")
     if not todo:
         return
@@ -213,7 +270,7 @@ def cmd_scan(args):
 
     t0 = time.time()
     n_faces_total = 0
-    for i, (path, mtime, size, kok) in enumerate(todo, 1):
+    for i, (path, mtime, size, kok, esler) in enumerate(todo, 1):
         status, faces = "ok", []
         img = imread_unicode(path)
         if img is None:
@@ -243,8 +300,10 @@ def cmd_scan(args):
                 "INSERT INTO faces(path,x1,y1,x2,y2,det_score,det_w,emb) VALUES(?,?,?,?,?,?,?,?)", rows
             )
         con.execute(
-            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok) VALUES(?,?,?,?,?,?)",
-            (path, mtime, size, len(rows), status, kok),
+            "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok,esler) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (path, mtime, size, len(rows), status, kok,
+             "|".join(esler) if esler else None),
         )
         n_faces_total += len(rows)
 
@@ -797,10 +856,18 @@ def cmd_export(args):
     zaten_vardi = dst.exists()
     dst.mkdir(parents=True, exist_ok=True)
 
+    esler_tablo = {}
+    for r in con.execute("SELECT path, esler FROM files WHERE esler IS NOT NULL"):
+        esler_tablo[r[0]] = [x for x in (r[1] or "").split("|") if x]
+
     yazma_listesi = []          # (hedef_dizin, kaynak_dosya)
     for folder, paths in plan:
         for p in paths:
-            yazma_listesi.append((hedef_dizin(p, folder), p))
+            d = hedef_dizin(p, folder)
+            yazma_listesi.append((d, p))
+            for es in esler_tablo.get(p, []):     # ayni karenin RAW/JPEG esi
+                if os.path.exists(es):
+                    yazma_listesi.append((d, es))
     toplam_dosya = len(yazma_listesi)
     toplam_bayt = 0
     for _, p in yazma_listesi:

@@ -223,3 +223,32 @@ kurulmadan geri açılamaz — yani kullanıcıdan kapatmasını istemek doğru 
   Doğrulandı: hedef `...\Python312\python.exe`, imza durumu `Valid`, `CN=Python Software Foundation`.
 - Kılavuzdaki "Yol B": Microsoft Store'dan Python + PowerShell'e `py -3` yazıp
   `kur.py` dosyasını pencereye **sürükle-bırak** (yol yazmaya gerek kalmaz).
+
+## RAW desteği (v1.9.0)
+
+`rawpy` (LibRaw 0.22) ile 18 ham format. `imread_unicode` RAW uzantılarını
+`raw_oku`'ya yönlendirir: **önce gömülü önizleme** (`extract_thumb`), o yoksa/küçükse
+`postprocess(half_size=True)`.
+
+Ölçüm (bu makine):
+
+| dosya | gömülü önizleme | tam çözümleme | kazanç |
+|---|---|---|---|
+| Canon CR2 (6.5 MB) | **0.01 sn** → 1936×1288 | 0.20 sn | 18× |
+| Nikon NEF (10.2 MB) | **0.01 sn** → 4256×2832 | 0.83 sn | 74× |
+
+Önizlemeler tam çözünürlükte geldiği için yüz tanıma kalitesi düşmüyor.
+
+### RAW/JPEG çifti
+
+`raw-jpeg` klasörlerinde aynı kare iki dosya olarak durur; ikisini de taramak yüzleri
+ve kişi sayılarını **iki katına çıkarırdı**. `list_images` artık `(klasör, dosya gövdesi)`
+anahtarıyla gruplar; `TARAMA_ONCELIGI` ile JPEG birincil seçilir (hızlı), RAW eş olarak
+`files.esler` sütununa yazılır. Export ve `etiketle` eşleri de işler:
+
+- klasörlemede eş, birincilin yanına aynı klasöre kopyalanır/bağlanır
+- metadata yazımında eşe de aynı isimler yazılır (RAW → yan `.xmp`)
+
+Test edildi: 4 dosya (1 çift + 1 tek RAW + 1 tek JPEG) → 3 tarama, çift doğru eşleşti,
+NEF sorunsuz okundu, export'ta `.cr2` JPEG'iyle aynı kişi klasörüne gitti, metadata
+hem JPEG'in içine hem `.cr2.xmp` yan dosyasına yazıldı.

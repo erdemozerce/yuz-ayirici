@@ -253,6 +253,12 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
         return {"dosya": 0}
 
     con = sqlite3.connect(str(db_yolu))
+    esler_tablo = {}
+    try:
+        for r in con.execute("SELECT path, esler FROM files WHERE esler IS NOT NULL"):
+            esler_tablo[r[0]] = [x for x in (r[1] or "").split("|") if x]
+    except Exception:
+        pass
     kumeler = tuple(isimler)
     soru = ",".join("?" * len(kumeler))
     satirlar = con.execute(
@@ -280,6 +286,10 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
         veri = xmp_sozlugu(kisiler, g, y)
         nasil, hata = dosyaya_yaz(pyexiv2, yol, veri, mod=mod,
                                   dogrula=(i <= dogrula_adet))
+        # ayni karenin RAW/JPEG esine de ayni isimler yazilsin
+        for es in esler_tablo.get(yol, []):
+            if os.path.exists(es):
+                dosyaya_yaz(pyexiv2, es, veri, mod=mod, dogrula=False)
         if hata:
             sayac["hata"] += 1
             if len(hatalar) < 5:

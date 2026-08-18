@@ -6,3 +6,4 @@ pillow
 pillow-heif
 insightface
 pyexiv2
+rawpy
