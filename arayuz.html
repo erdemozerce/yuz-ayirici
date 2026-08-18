@@ -479,11 +479,30 @@ async function kisileriYukle(){
   if(!ks.length){
     const d2 = await al("/api/durum");
     const tarandi = (d2.ozet && d2.ozet.fotograf) ? d2.ozet.fotograf : 0;
-    alan.innerHTML = '<div class="bos-durum"><div class="ikon">👥</div>' +
-      (tarandi
-        ? ('<b>' + tarandi.toLocaleString("tr") + ' fotoğraf tarandı</b> ama henüz gruplanmadı.<br><br>' +
-           '<button class="ana" onclick="baslat('grupla')">Şimdi grupla</button>')
-        : 'Henüz kişi yok. Önce tarama yap.') + '</div>';
+    alan.innerHTML = "";
+    const bos = document.createElement("div");
+    bos.className = "bos-durum";
+    const ikon = document.createElement("div");
+    ikon.className = "ikon";
+    ikon.textContent = "👥";
+    bos.appendChild(ikon);
+    if(tarandi){
+      const yazi = document.createElement("div");
+      yazi.innerHTML = "<b>" + tarandi.toLocaleString("tr") +
+                       " fotoğraf tarandı</b> ama henüz gruplanmadı.";
+      bos.appendChild(yazi);
+      const dugme = document.createElement("button");
+      dugme.className = "ana";
+      dugme.style.marginTop = "14px";
+      dugme.textContent = "Şimdi grupla";
+      dugme.onclick = function(){ baslat("grupla"); };
+      bos.appendChild(dugme);
+    } else {
+      const yazi = document.createElement("div");
+      yazi.textContent = "Henüz kişi yok. Önce tarama yap.";
+      bos.appendChild(yazi);
+    }
+    alan.appendChild(bos);
     return;
   }
   alan.innerHTML = '<div class="kisiler">' + ks.map(k => `

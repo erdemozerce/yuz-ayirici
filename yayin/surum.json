@@ -1,6 +1,6 @@
 {
-  "surum": "1.12.4",
-  "notlar": "Kisi secimi (yalnizca secilenleri klasorle/isimlendir) arayuzde gorunur hale getirildi",
+  "surum": "1.12.5",
+  "notlar": "KRITIK: arayuzdeki JavaScript sozdizimi hatasi duzeltildi - 1.12.1-1.12.4 arasi tum dugmeler calismiyordu",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "01643d993c39fab8cca0378c4a61239babe0e3793dfaa72050929ed3ca2762fd"
+      "sha256": "3cdf5420a2970bc6f4b00b7b3cb13f3a679e73294f1bb3175de8a4895840c1e7"
     },
     {
       "ad": "arayuz.py",
@@ -20,7 +20,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "450505713fd5de26cd8ddb8eb48bfc401209a4ab88808011623887d5ac3cffbf"
+      "sha256": "1dfd6f167a47596f849b97477259ccb4cc1d1085fa61d5879b1367ff5ee706c9"
     },
     {
       "ad": "kutuphane.py",

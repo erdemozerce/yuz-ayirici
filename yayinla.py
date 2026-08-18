@@ -58,6 +58,39 @@ def surum_yaz(yeni):
         fs.write_text(s2, encoding="utf-8", newline="\n")
 
 
+def js_kontrol(yol):
+    """
+    arayuz.html icindeki <script> blogunda kaba sozdizimi kontrolu.
+    Gerekce: bir kez ic ice tirnak kacisi bozuldu ve 1.12.1-1.12.4 arasi
+    tum surumlerde arayuzun butun dugmeleri calismaz hale geldi. Bu kontrol
+    o hatanin tekrar yayinlanmasini engeller.
+    """
+    import re
+    metin = Path(yol).read_text(encoding="utf-8")
+    m = re.search(r"<script>(.*?)</script>", metin, re.S)
+    if not m:
+        return ["arayuz.html icinde <script> blogu yok"]
+    betik = m.group(1)
+    hatalar = []
+
+    # HTML dizesi icinde kacissiz tirnak: onclick="fn('x')" gibi
+    for i, satir in enumerate(betik.splitlines(), 1):
+        s = satir.strip()
+        if "onclick=" in s and ("'" in s or '"' in s):
+            # tek tirnakli JS dizesi icinde kacissiz tek tirnak var mi
+            if re.search(r"'[^'\n]*onclick=\"[^\"]*\('", s):
+                hatalar.append("satir %d: onclick icinde kacissiz tirnak -> %s"
+                               % (i, s[:70]))
+    # kaba denge kontrolu
+    if betik.count("{") != betik.count("}"):
+        hatalar.append("suslu parantez dengesiz: %d ac / %d kapa"
+                       % (betik.count("{"), betik.count("}")))
+    if betik.count("(") != betik.count(")"):
+        hatalar.append("parantez dengesiz: %d ac / %d kapa"
+                       % (betik.count("("), betik.count(")")))
+    return hatalar
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -68,6 +101,15 @@ def main():
     if not re.match(r"^\d+\.\d+\.\d+$", yeni):
         print("Surum numarasi 1.2.3 seklinde olmali.")
         return 1
+
+    arayuz = BASE / "arayuz.html"
+    if arayuz.exists():
+        hatalar = js_kontrol(arayuz)
+        if hatalar:
+            print("!! arayuz.html JavaScript kontrolu basarisiz - YAYINLANMADI:")
+            for h in hatalar:
+                print("   " + h)
+            return 1
 
     surum_yaz(yeni)
 
