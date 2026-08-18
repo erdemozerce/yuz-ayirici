@@ -10,14 +10,36 @@ değiştirmez — sadece okur.
 
 ## 1. Kurulum (bir kere)
 
-1. Gelen klasörü masaüstüne çıkar (ZIP ise sağ tık → *Tümünü ayıkla*).
-2. Klasördeki **KUR.bat** dosyasına çift tıkla.
+### Yol A — normal (çoğu bilgisayarda)
+
+1. Gelen klasörü masaüstüne çıkar (ZIP ise sağ tık → *Tümünü ayıkla*)
+2. Klasördeki **KUR.bat** dosyasına çift tıkla
 3. Siyah bir pencere açılır ve her şeyi kendi kurar. **10–20 dakika sürebilir**, kapatma.
 4. "KURULUM TAMAM" yazısını görünce Enter'a bas.
 
-Masaüstünde **Yüz Ayırıcı** kısayolu oluşur.
-
 > Windows "bilinmeyen uygulama" uyarısı verirse: *Ek bilgi* → *Yine de çalıştır*.
+
+### Yol B — "Akıllı Uygulama Denetimi" engellerse
+
+Windows 11'in bu koruması imzasız `.bat` dosyalarını engeller ve "yine de çalıştır"
+seçeneği vermez. O zaman `.bat` dosyasına hiç dokunmadan şöyle kur:
+
+**1.** Python'u kur — **Microsoft Store**'u aç, `Python 3.12` ara, **Al/Yükle** de.
+*(Store'dan gelen her şey imzalıdır, engellenmez.)*
+
+**2.** Başlat menüsünden **PowerShell**'i aç ve şunu yaz — sonuna boşluk koy, **Enter'a basma**:
+
+```
+py -3
+```
+
+**3.** Program klasöründeki **kur.py** dosyasını fareyle tutup PowerShell penceresinin
+üzerine **sürükleyip bırak**. Dosyanın tam yolu kendiliğinden yazılacak. Şimdi Enter'a bas.
+
+**4.** Kurulum başlar, 10–20 dakika sürer.
+
+Bitince masaüstünde **Yüz Ayırıcı** kısayolu oluşur. Bu kısayol `.bat` değil,
+doğrudan Python'u çalıştırır — günlük kullanımda da engellenmez.
 
 ---
 

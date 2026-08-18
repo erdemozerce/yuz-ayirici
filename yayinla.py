@@ -29,6 +29,7 @@ YAYIN = BASE / "yayin"
 # Uzaktan guncellenecek dosyalar. .bat dosyalari bilerek disarida:
 # calisirken degistirilmeleri Windows'ta sorun cikarir.
 DOSYALAR = [
+    "kur.py",
     "face_sorter.py",
     "arayuz.py",
     "arayuz.html",

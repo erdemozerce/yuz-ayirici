@@ -1,11 +1,16 @@
 {
-  "surum": "1.8.0",
-  "notlar": "Isimler artik fotografin metadata'sina yazilabiliyor (ACDSee + Lightroom uyumlu, kopya olusturmadan)",
+  "surum": "1.8.1",
+  "notlar": "Akilli Uygulama Denetimi uyumu: .bat gerektirmeyen kurulum (kur.py) ve imzali python.exe kisayolu",
   "dosyalar": [
+    {
+      "ad": "kur.py",
+      "url": "kur.py",
+      "sha256": "154770737eabacb4cff45022492ad5808f19ba0465e58cbc8c204b3f363b670f"
+    },
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "814a4ce8a7bd12e7f3124f89715c76b253d538febbb87798ee63e95ae860a3b7"
+      "sha256": "e89b97203f382c790aca25f0193005b2975f7ad0564b5f018a896dd80fb9bac2"
     },
     {
       "ad": "arayuz.py",

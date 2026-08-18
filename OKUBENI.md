@@ -205,3 +205,21 @@ exiv2 yapılandırılmış XMP için önce tip bildirimi ister:
 **Bilinmeyen:** ACDSee'nin bu bölgeleri gerçekten People panelinde gösterip
 göstermediği — burada ACDSee kurulu değil. Kardeşin 20 fotoğraflık denemeyle
 doğrulamalı. Anahtar kelime kısmı her koşulda çalışır.
+
+## Akıllı Uygulama Denetimi (Smart App Control) uyumu — v1.8.1
+
+Windows 11'in SAC'ı imzasız `.bat` dosyalarını engelliyor ve SmartScreen'in aksine
+"yine de çalıştır" seçeneği **vermiyor**. SAC bir kez kapatılırsa Windows yeniden
+kurulmadan geri açılamaz — yani kullanıcıdan kapatmasını istemek doğru değil.
+
+Çözüm: `.bat` bağımlılığını kaldırmak.
+
+- **`kur.py`** — kurulumun tamamı saf Python. `py -3 kur.py` ile çalışır;
+  `python.exe` Python Software Foundation tarafından imzalıdır, SAC engellemez.
+- **`KUR.bat`** artık sadece ince bir sarmalayıcı: Python'u bulur/kurar, `kur.py`'yi çağırır.
+  Çalıştığı makinelerde kolaylık, çalışmadığı yerde gereksiz.
+- **Masaüstü kısayolu** artık `BASLAT.bat`'ı değil, doğrudan
+  `python.exe "arayuz.py"` hedefini gösteriyor — günlük kullanımda da `.bat` devrede değil.
+  Doğrulandı: hedef `...\Python312\python.exe`, imza durumu `Valid`, `CN=Python Software Foundation`.
+- Kılavuzdaki "Yol B": Microsoft Store'dan Python + PowerShell'e `py -3` yazıp
+  `kur.py` dosyasını pencereye **sürükle-bırak** (yol yazmaya gerek kalmaz).
