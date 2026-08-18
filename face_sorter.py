@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 
 import argparse
 import base64
@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS faces(
 );
 CREATE INDEX IF NOT EXISTS idx_faces_path    ON faces(path);
 CREATE INDEX IF NOT EXISTS idx_faces_cluster ON faces(cluster);
+CREATE TABLE IF NOT EXISTS duzeltmeler(
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    islem  TEXT,
+    detay  TEXT,
+    tarih  TEXT
+);
 CREATE TABLE IF NOT EXISTS oneriler(
     cluster   INTEGER PRIMARY KEY,
     onerilen  TEXT,
@@ -327,6 +333,20 @@ def cmd_cluster(args):
     from sklearn.cluster import DBSCAN
 
     con = db_connect(args.db)
+    n_duzeltme = duzeltme_sayisi(con)
+    if n_duzeltme and not args.evet:
+        print("DIKKAT: bu veritabaninda %d elle duzeltme var "
+              "(birlestirme/bolme/cikarma)." % n_duzeltme)
+        print("Yeniden gruplamak bu duzeltmelerin HEPSINI siler.")
+        try:
+            c = input("Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
+        except EOFError:
+            c = "h"
+        if c not in ("", "e", "evet", "y", "yes"):
+            print("Iptal edildi - kumeler oldugu gibi kaldi.")
+            return
+        con.execute("DELETE FROM duzeltmeler")
+        con.commit()
     ids, X = load_embeddings(con, args.min_score, args.min_face)
     if len(ids) == 0:
         print("Kumelenecek yuz yok. Once 'scan' calistir.")
@@ -377,7 +397,7 @@ def cmd_cluster(args):
 def kume_ornekleri(con, cid, adet):
     """Bir kumenin merkezine en yakin (en temsili) yuzlerini dondurur."""
     rows = con.execute(
-        "SELECT path,x1,y1,x2,y2,emb FROM faces WHERE cluster = ?", (cid,)
+        "SELECT path,x1,y1,x2,y2,emb,id FROM faces WHERE cluster = ?", (cid,)
     ).fetchall()
     if not rows:
         return []
@@ -386,7 +406,7 @@ def kume_ornekleri(con, cid, adet):
     merkez = E.mean(axis=0)
     merkez /= np.linalg.norm(merkez) + 1e-9
     sira = np.argsort(-(E @ merkez))[:adet]
-    return [rows[i][:5] for i in sira]
+    return [(rows[i][6],) + tuple(rows[i][:5]) for i in sira]
 
 
 def kume_vektorleri(con, cid):
@@ -619,6 +639,123 @@ def cmd_confirm(args):
         kutuphaneye_isle(con, yol, getattr(args, "kutuphane", None), kaynak=Path(args.db).name)
     print()
     print("Klasorleri bu isimlerle olusturmak icin 'export' adimini calistirin.")
+
+
+def duzeltme_yaz(con, islem, detay):
+    con.execute("INSERT INTO duzeltmeler(islem, detay, tarih) VALUES(?,?,?)",
+                (islem, detay, time.strftime("%Y-%m-%d %H:%M")))
+    con.commit()
+
+
+def duzeltme_sayisi(con):
+    try:
+        return con.execute("SELECT COUNT(*) FROM duzeltmeler").fetchone()[0]
+    except Exception:
+        return 0
+
+
+def cmd_birlestir(args):
+    """Iki ya da daha fazla kumeyi tek kisi yapar (ayni insan iki gruba bolunmusse)."""
+    con = db_connect(args.db)
+    kumeler = sorted(set(int(k) for k in args.kume))
+    if len(kumeler) < 2:
+        print("En az iki kume numarasi verin:  --kume 3 7")
+        return
+    var = {r[0] for r in con.execute("SELECT DISTINCT cluster FROM faces WHERE cluster > 0")}
+    eksik = [k for k in kumeler if k not in var]
+    if eksik:
+        print("Bu kumeler yok: %s" % eksik)
+        return
+
+    hedef = kumeler[0]
+    digerleri = kumeler[1:]
+    say = con.execute(
+        "SELECT COUNT(*) FROM faces WHERE cluster IN (%s)" % ",".join("?" * len(digerleri)),
+        digerleri).fetchone()[0]
+    con.execute("UPDATE faces SET cluster = ? WHERE cluster IN (%s)"
+                % ",".join("?" * len(digerleri)), [hedef] + digerleri)
+    con.commit()
+    duzeltme_yaz(con, "birlestir", "%s -> %d" % (digerleri, hedef))
+
+    toplam = con.execute("SELECT COUNT(DISTINCT path) FROM faces WHERE cluster = ?",
+                         (hedef,)).fetchone()[0]
+    print("Birlestirildi: kume %s -> kisi_%04d" % (digerleri, hedef))
+    print("  %d yuz tasindi, kisi_%04d artik %d fotografta." % (say, hedef, toplam))
+    isim_csv_yaz(con, args.names or "isimler.csv")
+    print("  Not: bu kisiye isim verdiyseniz 'ogren' ile kutuphaneyi guncelleyin.")
+
+
+def cmd_bol(args):
+    """Bir kumede iki farkli insan varsa daha kati esikle ikiye/uce ayirir."""
+    from sklearn.cluster import AgglomerativeClustering
+
+    con = db_connect(args.db)
+    cid = int(args.kume)
+    rows = con.execute("SELECT id, emb FROM faces WHERE cluster = ?", (cid,)).fetchall()
+    if len(rows) < 4:
+        print("kisi_%04d icinde bolunecek kadar yuz yok (%d)." % (cid, len(rows)))
+        return
+    ids = np.array([r[0] for r in rows])
+    X = np.vstack([np.frombuffer(r[1], np.float32) for r in rows])
+    X = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
+
+    model = AgglomerativeClustering(n_clusters=None, metric="cosine",
+                                    linkage="average", distance_threshold=args.esik)
+    etiket = model.fit_predict(X)
+    gruplar = {}
+    for e, i in zip(etiket, ids):
+        gruplar.setdefault(int(e), []).append(int(i))
+    gruplar = {k: v for k, v in gruplar.items() if len(v) >= args.min_yuz}
+    if len(gruplar) < 2:
+        print("kisi_%04d tek kisi gibi duruyor (esik %.2f ile bolunemedi)." % (cid, args.esik))
+        print("Daha cok parcaya bolmek icin esigi dusurun:  --esik %.2f"
+              % max(args.esik - 0.10, 0.20))
+        return
+
+    en_buyuk = max(gruplar, key=lambda k: len(gruplar[k]))
+    yeni_no = (con.execute("SELECT MAX(cluster) FROM faces").fetchone()[0] or 0)
+    olusan = []
+    for g, uyeler in gruplar.items():
+        if g == en_buyuk:
+            hedef = cid                       # en kalabalik grup eski numarada kalir
+        else:
+            yeni_no += 1
+            hedef = yeni_no
+        con.executemany("UPDATE faces SET cluster = ? WHERE id = ?",
+                        [(hedef, u) for u in uyeler])
+        olusan.append((hedef, len(uyeler)))
+    # hicbir gruba girmeyen yuzler siniflandirilmamis olsun
+    kalanlar = set(int(i) for i in ids) - {u for v in gruplar.values() for u in v}
+    if kalanlar:
+        con.executemany("UPDATE faces SET cluster = -1 WHERE id = ?",
+                        [(u,) for u in kalanlar])
+    con.commit()
+    duzeltme_yaz(con, "bol", "kume %d -> %s" % (cid, [o[0] for o in olusan]))
+
+    print("kisi_%04d bolundu (esik %.2f):" % (cid, args.esik))
+    for hedef, adet in sorted(olusan):
+        foto = con.execute("SELECT COUNT(DISTINCT path) FROM faces WHERE cluster = ?",
+                           (hedef,)).fetchone()[0]
+        print("  kisi_%04d : %d yuz, %d fotograf" % (hedef, adet, foto))
+    if kalanlar:
+        print("  %d yuz siniflandirilamadi." % len(kalanlar))
+    isim_csv_yaz(con, args.names or "isimler.csv")
+
+
+def cmd_cikar(args):
+    """Yanlis eslesmis tek tek yuzleri kumeden cikarir ('bu kisi degil')."""
+    con = db_connect(args.db)
+    yuzler = [int(y) for y in args.yuz]
+    if not yuzler:
+        print("Cikarilacak yuz numarasi verin:  --yuz 1234 1235")
+        return
+    var = con.execute("SELECT COUNT(*) FROM faces WHERE id IN (%s)"
+                      % ",".join("?" * len(yuzler)), yuzler).fetchone()[0]
+    con.executemany("UPDATE faces SET cluster = -1 WHERE id = ?", [(y,) for y in yuzler])
+    con.commit()
+    duzeltme_yaz(con, "cikar", str(yuzler))
+    print("%d yuz kumesinden cikarildi (artik 'siniflandirilamayan')." % var)
+    isim_csv_yaz(con, args.names or "isimler.csv")
 
 
 # --------------------------------------------------------------------------
@@ -1029,7 +1166,31 @@ def main():
     c.add_argument("--claim", type=float, default=0.55, help="tekil yuzleri en yakin kisiye ekleme esigi (0 = kapali)")
     c.add_argument("--min-score", type=float, default=0.60, help="yuz tespit guven esigi")
     c.add_argument("--min-face", type=float, default=45, help="cok kucuk yuzleri (piksel) ele")
+    c.add_argument("--evet", action="store_true", help="elle duzeltme uyarisini atla")
     c.set_defaults(func=cmd_cluster)
+
+    b = sub.add_parser("birlestir", help="iki kumeyi tek kisi yap (ayni insan bolunmusse)")
+    b.add_argument("--db", default="faces.db")
+    b.add_argument("--names", default="isimler.csv")
+    b.add_argument("--kume", nargs="+", required=True, help="birlestirilecek kume numaralari")
+    b.set_defaults(func=cmd_birlestir)
+
+    bl = sub.add_parser("bol", help="bir kumede iki kisi varsa ayir")
+    bl.add_argument("--db", default="faces.db")
+    bl.add_argument("--names", default="isimler.csv")
+    bl.add_argument("--kume", required=True, help="bolunecek kume numarasi")
+    bl.add_argument("--esik", type=float, default=0.60,
+                    help="dusurdukce daha cok parcaya boler (varsayilan 0.60). "
+                         "Gercek veriyle olculdu: 0.60 ayri kisileri temiz ayirdi, "
+                         "0.45 ayni kisiyi de bolmeye basladi.")
+    bl.add_argument("--min-yuz", type=int, default=2, help="yeni kumede en az kac yuz olsun")
+    bl.set_defaults(func=cmd_bol)
+
+    ck = sub.add_parser("cikar", help="yanlis eslesen tek tek yuzleri kumeden cikar")
+    ck.add_argument("--db", default="faces.db")
+    ck.add_argument("--names", default="isimler.csv")
+    ck.add_argument("--yuz", nargs="+", required=True, help="cikarilacak yuz id'leri")
+    ck.set_defaults(func=cmd_cikar)
 
     r = sub.add_parser("review", help="kumeleri gorsel olarak incele + isim sablonu")
     r.add_argument("--db", default="faces.db")

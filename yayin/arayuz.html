@@ -71,6 +71,17 @@
     transition:.13s}
   .kisi:hover{border-color:var(--vurgu)}
   .kisi .yuzler{display:flex;gap:5px;margin-bottom:11px;overflow:hidden}
+  .kisi .yuzler img{cursor:pointer;transition:.12s}
+  .kisi .yuzler img:hover{outline:2px solid var(--kirmizi);outline-offset:1px;opacity:.75}
+  .kisi.secili{border-color:var(--vurgu);box-shadow:0 0 0 1px var(--vurgu)}
+  .kisi .araclar{display:flex;gap:6px;margin-top:9px;align-items:center}
+  .kisi .araclar button{padding:4px 10px;font-size:11.5px;border-radius:7px}
+  .kisi .sec{margin-right:2px;accent-color:var(--vurgu);width:15px;height:15px;cursor:pointer}
+  #birlestir-cubugu{position:sticky;bottom:14px;z-index:5;background:var(--vurgu);
+    color:#fff;border-radius:12px;padding:12px 16px;display:flex;align-items:center;
+    gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);margin-top:14px}
+  #birlestir-cubugu button{background:rgba(255,255,255,.16);border-color:transparent;color:#fff}
+  #birlestir-cubugu button:hover{background:rgba(255,255,255,.28);color:#fff}
   .kisi img{width:100%;max-width:62px;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
   .kisi .ust{display:flex;align-items:center;gap:8px;margin-bottom:9px}
   .kisi .no{font-size:11.5px;color:var(--soluk);font-family:ui-monospace,Consolas,monospace}
@@ -178,13 +189,21 @@
         Henüz kişi yok. Önce tarama yap.
       </div>
     </div>
+    <div id="birlestir-cubugu" class="gizli">
+      <span id="secim-yazi">0 kişi seçildi</span>
+      <button onclick="secilenleriBirlestir()">Seçilenleri birleştir</button>
+      <button onclick="secimiTemizle()">Vazgeç</button>
+    </div>
     <div class="dugmeler">
       <button onclick="kisileriYukle()">Yenile</button>
       <button onclick="baslat('ogren')">İsimleri kütüphaneye öğret</button>
     </div>
     <div class="ipucu">
       Bir kişiye isim verdiğinde program o yüzü hatırlar; sonraki bölümde kendisi tanır.
-      <span class="etiketcik">kütüphaneden</span> etiketi, ismin otomatik bulunduğunu gösterir — onaylamak için kutuya dokunman yeterli.
+      <span class="etiketcik">kütüphaneden</span> etiketi, ismin otomatik bulunduğunu gösterir.<br><br>
+      <b>Yanlış gruplandıysa:</b> aynı kişi iki karta bölünmüşse ikisini de işaretle ve
+      <i>Seçilenleri birleştir</i> de. Bir kartta iki farklı kişi varsa <i>Böl</i>.
+      Karttaki bir yüz o kişiye ait değilse yüze tıkla, gruptan çıkarılır.
     </div>
   </div>
 
@@ -360,13 +379,18 @@ async function kisileriYukle(){
   alan.innerHTML = '<div class="kisiler">' + ks.map(k => `
     <div class="kisi">
       <div class="ust">
+        <input type="checkbox" class="sec" onchange="secimDegisti(${k.kume}, this)">
         <span class="no">kisi_${String(k.kume).padStart(4,"0")}</span>
         <span class="adet">${k.fotograf} fotoğraf</span>
       </div>
-      <div class="yuzler">${k.resimler.map(r=>`<img src="${r}" alt="">`).join("")}</div>
+      <div class="yuzler">${k.resimler.map(r=>
+        `<img src="${r.resim}" title="Bu kişi değilse tıkla" onclick="yuzCikar(${r.id}, ${k.kume})">`).join("")}</div>
       <input list="bilinen-isimler" placeholder="isim yaz…"
              value="${(k.isim||"").replace(/"/g,"&quot;")}"
              onchange="isimYaz(${k.kume}, this)">
+      <div class="araclar">
+        <button onclick="kisiBol(${k.kume})" title="Bu grupta iki ayrı kişi varsa ayır">Böl</button>
+      </div>
       <div class="oneri">
         ${k.onerilen ? `<span class="etiketcik">kütüphaneden</span>
              <span>${k.onerilen}</span>
@@ -374,6 +398,41 @@ async function kisileriYukle(){
           : `<span class="etiketcik yeni">yeni kişi</span>`}
       </div>
     </div>`).join("") + '</div>';
+}
+
+let secilenler = new Set();
+function secimDegisti(kume, kutu){
+  if(kutu.checked) secilenler.add(kume); else secilenler.delete(kume);
+  kutu.closest(".kisi").classList.toggle("secili", kutu.checked);
+  $("#secim-yazi").textContent = secilenler.size + " kişi seçildi";
+  $("#birlestir-cubugu").classList.toggle("gizli", secilenler.size < 2);
+}
+function secimiTemizle(){
+  secilenler.clear();
+  document.querySelectorAll(".kisi .sec").forEach(c=>{c.checked=false;
+    c.closest(".kisi").classList.remove("secili");});
+  $("#birlestir-cubugu").classList.add("gizli");
+}
+async function secilenleriBirlestir(){
+  const liste = [...secilenler].sort((a,b)=>a-b);
+  if(!confirm("Seçilen " + liste.length + " grup tek kişide birleştirilecek.\n\n" +
+      "kisi_" + String(liste[0]).padStart(4,"0") + " numarasında toplanacaklar. Devam?")) return;
+  const c = await post("/api/duzelt", {islem:"birlestir", kume: liste});
+  if(c.hata) return uyar(c.hata);
+  secimiTemizle();
+}
+async function kisiBol(kume){
+  const e = prompt("Bu grupta iki farklı kişi mi var? Ayırmayı deneyeceğim.\n\n" +
+    "Eşik (küçültürsen daha çok parçaya böler):", "0.60");
+  if(e === null) return;
+  const c = await post("/api/duzelt", {islem:"bol", kume, esik: parseFloat(e) || 0.60});
+  if(c.hata) uyar(c.hata);
+}
+async function yuzCikar(yuzId, kume){
+  if(!confirm("Bu yüz bu kişiye ait değil mi?\n\nGruptan çıkarılacak " +
+              "(fotoğraf silinmez, sadece bu kişiden ayrılır).")) return;
+  const c = await post("/api/duzelt", {islem:"cikar", yuz:[yuzId]});
+  if(c.hata) uyar(c.hata);
 }
 
 async function isimYaz(kume, kutu){

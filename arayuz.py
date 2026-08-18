@@ -168,8 +168,8 @@ def ozet():
 
 
 def kucuk_resim(kayit, boy=132):
-    """Bir yuzu kirpip base64 JPEG dondurur."""
-    p, x1, y1, x2, y2 = kayit
+    """Bir yuzu kirpip base64 JPEG dondurur. kayit = (yuz_id, yol, x1,y1,x2,y2)"""
+    _, p, x1, y1, x2, y2 = kayit
     img = motor.imread_unicode(p)
     if img is None:
         return None
@@ -202,7 +202,11 @@ def kisiler_listesi(adet=5):
         "GROUP BY cluster ORDER BY COUNT(*) DESC"
     ):
         ornekler = motor.kume_ornekleri(con, cid, adet)
-        resimler = [r for r in (kucuk_resim(k) for k in ornekler) if r]
+        resimler = []
+        for k in ornekler:
+            r = kucuk_resim(k)
+            if r:
+                resimler.append({"id": k[0], "resim": r})
         o = oner.get(cid) or (None, 0.0, "")
         out.append({
             "kume": cid, "fotograf": nfoto, "yuz": nyuz,
@@ -355,6 +359,29 @@ class Vekil(BaseHTTPRequestHandler):
         if u.path == "/api/isim":
             isim_kaydet(veri.get("kume"), veri.get("isim", ""))
             return self._json({"ok": True})
+
+        if u.path == "/api/duzelt":
+            islem = veri.get("islem")
+            db = cfg["db"]
+            isimler = str(BASE / "isimler.csv")
+            if islem == "birlestir":
+                kumeler = [str(k) for k in (veri.get("kume") or [])]
+                if len(kumeler) < 2:
+                    return self._json({"hata": "En az iki kisi secin"}, 400)
+                return self._json({"ok": is_calistir("Kisiler birlestiriliyor", [
+                    "birlestir", "--db", db, "--names", isimler, "--kume"] + kumeler)})
+            if islem == "bol":
+                return self._json({"ok": is_calistir("Kisi bolunuyor", [
+                    "bol", "--db", db, "--names", isimler,
+                    "--kume", str(veri.get("kume")),
+                    "--esik", str(veri.get("esik", 0.60))])})
+            if islem == "cikar":
+                yuzler = [str(y) for y in (veri.get("yuz") or [])]
+                if not yuzler:
+                    return self._json({"hata": "Yuz secilmedi"}, 400)
+                return self._json({"ok": is_calistir("Yuz cikariliyor", [
+                    "cikar", "--db", db, "--names", isimler, "--yuz"] + yuzler)})
+            return self._json({"hata": "bilinmeyen islem"}, 400)
 
         if u.path == "/api/durdur":
             return self._json({"ok": durdur()})

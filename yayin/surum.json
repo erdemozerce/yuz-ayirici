@@ -1,6 +1,6 @@
 {
-  "surum": "1.9.0",
-  "notlar": "RAW destegi (CR2/NEF/ARW/DNG...) gomulu onizleme ile; ayni karenin RAW+JPEG cifti bir kez taranip birlikte isleniyor",
+  "surum": "1.10.0",
+  "notlar": "Kume duzeltme: birlestir, bol, 'bu kisi degil' - hem komut satirinda hem arayuzde",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,17 +10,17 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "e59e041849885593005af82b6868f2106979ea43d171170815d1b9b120a22add"
+      "sha256": "0013592c3c1e5527d556211ef93bc193dc04a43c82134d60a0730492dfaed50f"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "bf8bbc964fe0843b6254194301415aaa54d67b544b34250e9b24b1fc10e648c2"
+      "sha256": "93ecfd71fd15b08d9392116f7211b4018417f4b34b191617753eefbcdb8c6947"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "0238dfac6c220853db17f000434f25794aa05546adef24e5de1b23621824c418"
+      "sha256": "d2a6af6b12a81f406b83bca4d554a180881fae1732dcf36c755177d59b1f41d9"
     },
     {
       "ad": "kutuphane.py",

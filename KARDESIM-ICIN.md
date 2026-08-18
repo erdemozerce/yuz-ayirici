@@ -213,6 +213,20 @@ okumayabilir — gömülü seçenek daha güvenilir sonuç verir.)
 
 ## 4. Gruplar yanlış çıkarsa
 
+Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:
+
+| Sorun | Çözüm |
+|---|---|
+| Aynı kişi iki karta bölünmüş | İki kartı da işaretle → **Seçilenleri birleştir** |
+| Bir kartta iki farklı kişi var | O kartta **Böl** → eşik sor, Enter'a bas |
+| Karttaki bir yüz o kişiye ait değil | Yüzün üstüne tıkla → gruptan çıkar |
+
+Fotoğraf silinmez, sadece gruplama değişir.
+
+**Böl** eşiği: 0.60 varsayılan. Ayırmazsa 0.50 dene, fazla parçalarsa 0.70 yap.
+
+### Ayarla toptan yeniden gruplama
+
 Menüden **5**'e bas ve şu ayarı değiştir:
 
 - **Aynı kişi birkaç klasöre bölünmüş** → sayıyı **büyüt**: `0.58`

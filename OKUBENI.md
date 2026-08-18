@@ -252,3 +252,31 @@ anahtarıyla gruplar; `TARAMA_ONCELIGI` ile JPEG birincil seçilir (hızlı), RA
 Test edildi: 4 dosya (1 çift + 1 tek RAW + 1 tek JPEG) → 3 tarama, çift doğru eşleşti,
 NEF sorunsuz okundu, export'ta `.cr2` JPEG'iyle aynı kişi klasörüne gitti, metadata
 hem JPEG'in içine hem `.cr2.xmp` yan dosyasına yazıldı.
+
+## Küme düzeltme (v1.10.0)
+
+Üç işlem — `birlestir`, `bol`, `cikar` — hem komut satırında hem arayüzde.
+
+- **birlestir**: aynı insan iki gruba bölünmüşse tek kümede toplar (en küçük numarada).
+- **bol**: bir kümede iki kişi varsa `AgglomerativeClustering` (cosine, average linkage,
+  `distance_threshold`) ile ayırır. En kalabalık alt grup eski numarada kalır.
+- **cikar**: tek tek yanlış yüzleri kümeden çıkarır (`cluster = -1`).
+
+**Bölme eşiği gerçek veriyle kalibre edildi.** 75 ve 41 kişilik iki küme birleştirilip
+geri bölünmeye çalışıldı:
+
+| eşik | sonuç |
+|---|---|
+| 0.45 | 61+14+40 — aynı kişiyi de bölüyor |
+| 0.50 / 0.55 | 75+40 |
+| **0.60** | **75+41 — birebir doğru** |
+| 0.65 | 75+41 |
+
+Varsayılan **0.60**. Küçültmek daha çok parçaya böler.
+
+Düzeltmeler `duzeltmeler` tablosuna loglanır; `cluster` yeniden çalıştırılmak istenirse
+"%d elle düzeltme var, hepsi silinecek" uyarısı çıkar ve onay ister (`--evet` ile atlanır).
+
+Arayüzde: kartlarda seçim kutusu → *Seçilenleri birleştir*; her kartta *Böl* düğmesi;
+yüz küçük resmine tıklayınca o yüz gruptan çıkar. `kume_ornekleri` artık yüz id'si de
+döndürüyor (arayüzün "bu kişi değil" işlemi için gerekli).
