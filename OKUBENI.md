@@ -20,7 +20,7 @@ Kardeşinin kullanacağı kılavuz ayrı: [KARDESIM-ICIN.md](KARDESIM-ICIN.md)
 ## Kurulumu kardeşine gönderme
 
 ```bash
-python paket_yap.py https://raw.githubusercontent.com/KULLANICI/DEPO/main/yayin/surum.json
+python paket_yap.py https://raw.githubusercontent.com/erdemozerce/yuz-ayirici/main/yayin/surum.json
 ```
 
 Oluşan `yuz-ayirici-kurulum.zip` (~17 KB) dosyasını gönder. Kardeşin ZIP'i açıp
