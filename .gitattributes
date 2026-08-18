@@ -1,0 +1,4 @@
+# Satir sonu donusumu KAPALI. Aksi halde git dosyalari degistirir,
+# SHA-256 ozetleri tutmaz ve uzaktan guncelleme "kurcalanmis dosya"
+# diyerek reddeder. Buna dokunma.
+* -text
