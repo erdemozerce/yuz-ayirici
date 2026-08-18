@@ -172,3 +172,36 @@ kişi kimliğini değil. Aynı kişi tüm bölümlerde aynı küme numarasını 
 
 Test edildi: 2 ayrı ana klasör, 3 farklı derinlikte alt klasör, 9 fotoğraf → 2 kişi
 (küresel), üç düzenin üçü de doğru ağaç üretti; arayüzden uçtan uca çalıştırıldı.
+
+## Metadata'ya isim yazma (v1.8.0)
+
+`etiket.py` — `pyexiv2` (exiv2 0.28) ile üç biçim birden yazılır. ExifTool binary'si
+gerekmez, saf Python bağımlılığı.
+
+| biçim | anahtar | kim okur |
+|---|---|---|
+| Anahtar kelime | `Xmp.dc.subject`, `Xmp.lr.hierarchicalSubject` (`People|Ad`) | herkes |
+| MWG bölgeleri | `Xmp.mwg-rs.Regions/...` (`stArea`, `stDim`) | Lightroom, Bridge, digiKam, XnView |
+| ACDSee bölgeleri | `Xmp.acdsee-rs.Regions/...` (`acdsee-stArea`) | ACDSee Pro/Ultimate People paneli |
+
+**Ad alanları** ExifTool kaynağından doğrulandı: `acdsee-rs` = `http://ns.acdsee.com/regions/`,
+`acdsee-stArea` = `http://ns.acdsee.com/sType/Area#`, `acdsee-stDim` = `.../Dimensions#`.
+ACDSee bölge yapısında alan adları `DLYArea` (görüntülenen/manuel) ve `ALGArea`
+(algoritmanın bulduğu) — ikisi de yazılıyor. Koordinatlar her iki biçimde de
+**merkez noktası + genişlik/yükseklik**, 0–1 oranında.
+
+exiv2 yapılandırılmış XMP için önce tip bildirimi ister:
+`"Xmp.mwg-rs.Regions": "type=Struct"`, `".../RegionList": "type=Bag"` — bunlar olmadan
+*"Indexing applied to non-array"* hatası verir.
+
+**Doğrulanan davranışlar (test edildi):**
+- Mevcut yıldız / IPTC telif / eski anahtar kelimeler korunur, yeni isim **eklenir**
+- İki kez çalıştırmak aynı ismi tekrar yazmaz
+- Bir karede iki kişi → iki ayrı bölge, doğru ve farklı merkez koordinatları
+- `.cr2` → gömme yapılmaz, `.cr2.xmp` yan dosyası yazılır, orijinalin boyutu değişmez
+- İlk N dosyada yazım sonrası piksel verisi karşılaştırılır (`--dogrula`, varsayılan 5)
+- Türkçe karakterli isimler doğru yazılıp okunuyor
+
+**Bilinmeyen:** ACDSee'nin bu bölgeleri gerçekten People panelinde gösterip
+göstermediği — burada ACDSee kurulu değil. Kardeşin 20 fotoğraflık denemeyle
+doğrulamalı. Anahtar kelime kısmı her koşulda çalışır.

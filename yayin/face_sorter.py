@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
 import argparse
 import base64
@@ -642,6 +642,42 @@ def cmd_review(args):
     print(f"Inceleme sayfasi hazir: {args.out}  (tarayicida ac)")
 
 
+def cmd_etiketle(args):
+    """Kisi isimlerini fotograflarin metadata'sina yazar (kopya olusturmaz)."""
+    import etiket
+
+    try:
+        etiket.hazirla()
+    except RuntimeError as e:
+        print(e)
+        return
+
+    print()
+    print("=" * 66)
+    print("  METADATA'YA ISIM YAZMA  -  kopya olusturulmaz")
+    print("=" * 66)
+    print("  Yazim yeri : %s" % ("dosyanin icine (gomulu)" if args.mod == "gomulu"
+                                 else "yan .xmp dosyasina"))
+    print("  Bicimler   : anahtar kelime + MWG bolgeleri + ACDSee bolgeleri")
+    print("  Not        : goruntu verisine dokunulmaz, mevcut etiketler korunur.")
+    print("               RAW dosyalarda her zaman yan .xmp yazilir.")
+    if args.limit:
+        print("  DENEME     : yalnizca ilk %d fotograf" % args.limit)
+    print("=" * 66)
+    if not args.evet:
+        try:
+            print()
+            c = input("  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
+        except EOFError:
+            c = "h"
+        if c not in ("", "e", "evet", "y", "yes"):
+            print("  Iptal edildi - hicbir dosyaya dokunulmadi.")
+            return
+    print()
+    etiket.etiketle(args.db, args.names or "isimler.csv", mod=args.mod,
+                    limit=args.limit, dogrula_adet=args.dogrula)
+
+
 # --------------------------------------------------------------------------
 # 4) EXPORT — kisi klasorlerini olustur ve fotograflari yerlestir
 # --------------------------------------------------------------------------
@@ -963,6 +999,18 @@ def main():
     ks.add_argument("--kutuphane", default=None)
     ks.add_argument("--sil", default="", help="silinecek kisinin tam ismi")
     ks.set_defaults(func=cmd_kisiler)
+
+    m = sub.add_parser("etiketle", help="isimleri fotograf metadata'sina yaz (kopya olusturmaz)")
+    m.add_argument("--db", default="faces.db")
+    m.add_argument("--names", default="isimler.csv")
+    m.add_argument("--mod", choices=["gomulu", "yan"], default="gomulu",
+                   help="gomulu: dosyanin icine (ACDSee/Lightroom gorur). "
+                        "yan: .xmp yan dosyasi (orijinale hic dokunulmaz)")
+    m.add_argument("--limit", type=int, default=0, help="deneme icin ilk N fotograf")
+    m.add_argument("--dogrula", type=int, default=5,
+                   help="ilk N dosyada goruntu bozulmadi mi diye kontrol et")
+    m.add_argument("--evet", action="store_true", help="onay sormadan yaz")
+    m.set_defaults(func=cmd_etiketle)
 
     e = sub.add_parser("export", help="kisi klasorlerini olustur")
     e.add_argument("--db", default="faces.db")

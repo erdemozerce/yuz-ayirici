@@ -1,26 +1,31 @@
 {
-  "surum": "1.7.0",
-  "notlar": "Birden fazla kaynak klasor secilebiliyor; cikti kaynaktaki alt klasor yapisini koruyor",
+  "surum": "1.8.0",
+  "notlar": "Isimler artik fotografin metadata'sina yazilabiliyor (ACDSee + Lightroom uyumlu, kopya olusturmadan)",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "2fd69cbe541d5541b3bd68e5c5bd9b120a7206535e32f48d5dae591968d1f6d5"
+      "sha256": "814a4ce8a7bd12e7f3124f89715c76b253d538febbb87798ee63e95ae860a3b7"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "ad0be25434a9bec1f9466864c15b0bfb6df61f90d6f02a715e6f29d8938bdf81"
+      "sha256": "bf8bbc964fe0843b6254194301415aaa54d67b544b34250e9b24b1fc10e648c2"
     },
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "51f0738c304b504e74f32d9d6b17cfc9fa1b87bd2b179c0533f64681cead482c"
+      "sha256": "0238dfac6c220853db17f000434f25794aa05546adef24e5de1b23621824c418"
     },
     {
       "ad": "kutuphane.py",
       "url": "kutuphane.py",
       "sha256": "7e2e1bc6b763b4fee8651835952a7096729f746702bbf28ccde348197926e21a"
+    },
+    {
+      "ad": "etiket.py",
+      "url": "etiket.py",
+      "sha256": "f7d07242bd93ea194bb4612b2fe33afbca791f9e6400117e68e97fe69935d9e0"
     },
     {
       "ad": "baslat.py",
@@ -40,7 +45,7 @@
     {
       "ad": "gereksinimler.txt",
       "url": "gereksinimler.txt",
-      "sha256": "d309498a2b2458a7cfd38617de696a691aed2ed1e66d69eaa412bb4271dd7c58"
+      "sha256": "ce12f7ddce9a4d80e3bf252f1b40a01bcb87acf05bbcaa458bb7df581e8c2506"
     }
   ]
 }

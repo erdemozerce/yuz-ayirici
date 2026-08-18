@@ -5,3 +5,4 @@ scikit-learn
 pillow
 pillow-heif
 insightface
+pyexiv2

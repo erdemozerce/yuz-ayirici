@@ -189,7 +189,32 @@
   </div>
 
   <div class="kart">
-    <h2>4 · Klasörleme</h2>
+    <h2>4a · İsimleri fotoğrafın içine yaz <span style="color:var(--yesil);font-weight:400">· kopya oluşturmaz</span></h2>
+    <div class="satir">
+      <div class="etiket">Yazım yeri</div>
+      <div class="deger" style="font-family:inherit;font-size:13.5px">
+        <select id="etiket-mod" onchange="etiketModDegistir()">
+          <option value="gomulu">Fotoğrafın içine göm &nbsp;(ACDSee/Lightroom görür)</option>
+          <option value="yan">Yan .xmp dosyasına &nbsp;(orijinale hiç dokunma)</option>
+        </select>
+      </div>
+    </div>
+    <div class="dugmeler">
+      <button id="b-etiket-deneme" onclick="baslat('etiketle',{deneme:true})">Önce 20 fotoğrafta dene</button>
+      <button class="ana" id="b-etiket" onclick="etiketOnayla()">Hepsine yaz</button>
+    </div>
+    <div class="ipucu">
+      İsimler fotoğrafın kendi etiket alanına yazılır: <b>tek bir kopya oluşmaz, disk dolmaz.</b>
+      Üç biçim birden yazılır — anahtar kelime (her programda arama), MWG yüz kutusu
+      (Lightroom/Bridge) ve ACDSee'nin kendi biçimi (People paneli).<br><br>
+      Görüntü verisine dokunulmaz; yıldız, telif, mevcut anahtar kelimeler korunur.
+      RAW dosyalarda orijinal hiç açılmaz, yanına <code>.xmp</code> dosyası yazılır.
+      <b>Önce 20 fotoğrafta deneyip ACDSee'de kontrol et.</b>
+    </div>
+  </div>
+
+  <div class="kart">
+    <h2>4b · Klasörleme <span style="color:var(--soluk);font-weight:400">· kopya oluşturur</span></h2>
     <div class="dugmeler">
       <button id="b-onizle" onclick="baslat('onizleme')">Önce hesapla (hiçbir şey yazmaz)</button>
       <button class="ana" id="b-klasorle" onclick="klasorleOnayla()">Klasörleri Oluştur</button>
@@ -240,6 +265,16 @@ async function durdur(){ await post("/api/durdur"); }
 
 async function kaynakSil(sira){ await post("/api/klasor", {tip:"kaynak_sil", sira}); durumGuncelle(); }
 async function duzenDegistir(){ await post("/api/ayar", {duzen: $("#duzen").value}); }
+async function etiketModDegistir(){ await post("/api/ayar", {etiket_mod: $("#etiket-mod").value}); }
+async function etiketOnayla(){
+  const d = await al("/api/durum");
+  if(!d.ozet.isimli) return uyar("Önce en az bir kişiye isim verin.");
+  const gomulu = $("#etiket-mod").value === "gomulu";
+  if(confirm(gomulu
+      ? "İsimler fotoğrafların İÇİNE yazılacak.\n\nGörüntü değişmez, mevcut etiketler korunur.\nÖnce 20 fotoğrafta denediniz mi?\n\nDevam edilsin mi?"
+      : "İsimler yan .xmp dosyalarına yazılacak.\nOrijinal fotoğraflara hiç dokunulmaz.\n\nDevam edilsin mi?"))
+    baslat("etiketle");
+}
 
 async function hepsiniYap(){
   const d = await al("/api/durum");
@@ -275,6 +310,7 @@ async function durumGuncelle(){
       <button class="tehlike" onclick="kaynakSil(${i})">Çıkar</button>
     </div>`).join("");
   $("#duzen").value = d.ayar.duzen || "altklasor-kisi";
+  $("#etiket-mod").value = d.ayar.etiket_mod || "gomulu";
   $("#y-hedef").textContent = h || "seçilmedi";
   $("#y-hedef").className = "deger" + (h ? "" : " bos");
 
@@ -285,7 +321,7 @@ async function durumGuncelle(){
   $("#rozet").textContent = calisiyor ? d.adim + "…" : "hazır";
   $("#ilerleme-kutu").classList.toggle("gizli", !calisiyor && !d.satirlar.length);
   $("#b-durdur").classList.toggle("gizli", !calisiyor);
-  ["b-hepsi","b-deneme","b-grupla","b-tani","b-klasorle","b-onizle"]
+  ["b-hepsi","b-deneme","b-grupla","b-tani","b-klasorle","b-onizle","b-etiket","b-etiket-deneme"]
     .forEach(i => $("#"+i).disabled = calisiyor);
 
   $("#i-adim").textContent = d.adim || "—";

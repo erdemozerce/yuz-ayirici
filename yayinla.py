@@ -33,6 +33,7 @@ DOSYALAR = [
     "arayuz.py",
     "arayuz.html",
     "kutuphane.py",
+    "etiket.py",
     "baslat.py",
     "guncelle.py",
     "kurulum_testi.py",

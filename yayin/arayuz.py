@@ -60,7 +60,7 @@ def ayar_oku():
         "kaynak_klasorler": [], "kaynak_klasor": "", "hedef_klasor": "",
         "db": str(BASE / "faces.db"),
         "eps": 0.50, "min_samples": 3, "mod": "auto",
-        "duzen": "altklasor-kisi", "derinlik": 0,
+        "duzen": "altklasor-kisi", "derinlik": 0, "etiket_mod": "gomulu",
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -346,7 +346,7 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json({"yol": yol})
 
         if u.path == "/api/ayar":
-            for k in ("eps", "min_samples", "mod", "duzen", "derinlik"):
+            for k in ("eps", "min_samples", "mod", "duzen", "derinlik", "etiket_mod"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -388,6 +388,12 @@ class Vekil(BaseHTTPRequestHandler):
                     "export", "--db", db, "--dst", cfg["hedef_klasor"],
                     "--names", isimler, "--mode", cfg["mod"],
                     "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"], "--evet"])})
+            if adim == "etiketle":
+                a = ["etiketle", "--db", db, "--names", isimler,
+                     "--mod", cfg.get("etiket_mod", "gomulu"), "--evet"]
+                if veri.get("deneme"):
+                    a += ["--limit", "20"]
+                return self._json({"ok": is_calistir("Metadata yaziliyor", a)})
             if adim == "onizleme":
                 if not cfg.get("hedef_klasor"):
                     return self._json({"hata": "Once cikti klasorunu secin"}, 400)

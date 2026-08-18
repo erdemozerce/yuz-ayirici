@@ -149,6 +149,35 @@ ve sana sorar. Yanlış isim yazmaktansa boş bırakmayı tercih eder.
 
 ---
 
+## 3c. İsimleri fotoğrafın içine yazmak (klasör açmadan)
+
+Klasörleme her fotoğrafın **kopyasını** oluşturur — 10.000 kare için yüzlerce GB.
+Bunun yerine isimleri fotoğrafın kendi **etiket alanına** yazabilirsin: hiç kopya
+oluşmaz, disk dolmaz, ama **ACDSee'de kişi ismi görünür ve aranabilir**.
+
+Panelde **4a · İsimleri fotoğrafın içine yaz** bölümü:
+
+- **Önce 20 fotoğrafta dene** → ACDSee'yi açıp kontrol et
+- Doğruysa **Hepsine yaz**
+
+ACDSee'de kontrol: fotoğrafı seç, sağdaki **Properties** panelinde anahtar kelimeler
+arasında isim görünmeli. Yüz kutuları için **People** sekmesine bak.
+
+### Ne değişiyor, ne değişmiyor
+
+| | |
+|---|---|
+| Görüntü kalitesi | ❌ değişmez, fotoğraf yeniden sıkıştırılmaz |
+| Yıldız, telif, mevcut anahtar kelimeler | ❌ silinmez, korunur |
+| RAW dosyalar | ❌ hiç açılmaz — yanına `.xmp` dosyası yazılır |
+| Dosya boyutu | birkaç KB artar (sadece etiket) |
+
+Tedirginsen **yan .xmp dosyasına** seçeneğini kullan: orijinal fotoğrafa hiç
+dokunulmaz, isimler ayrı bir dosyada durur. (Ama ACDSee bunu JPEG'lerde
+okumayabilir — gömülü seçenek daha güvenilir sonuç verir.)
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Menüden **5**'e bas ve şu ayarı değiştir:
