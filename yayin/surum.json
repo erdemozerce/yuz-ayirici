@@ -1,16 +1,16 @@
 {
-  "surum": "1.0.2",
-  "notlar": "Kurulum testindeki sure tahmini gercekci hale getirildi",
+  "surum": "1.1.0",
+  "notlar": "exFAT/NTFS otomatik algilama, yazma oncesi klasor onayi ve ozet ekrani",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "1b0d9b8d3dd1cb5aedfc37f6d1ce40b4c8effe4c85450cd5019bfeb0c279f822"
+      "sha256": "85ce8905f07e58ef6714296b3160b38fefcc3af6f189394ee40872a28622a493"
     },
     {
       "ad": "baslat.py",
       "url": "baslat.py",
-      "sha256": "ecefd399610bc9fc48424249f0469780562c00825845c4867276fd9ae62bb086"
+      "sha256": "590964bd0e1d0f11867ab10d5001c69184619ee394176f6e0d655679890c6436"
     },
     {
       "ad": "guncelle.py",

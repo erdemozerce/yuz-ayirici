@@ -19,13 +19,14 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 
 import argparse
 import base64
 import csv
 import os
 import re
+import shutil
 import sqlite3
 import sys
 import time
@@ -343,6 +344,47 @@ def cmd_review(args):
 # --------------------------------------------------------------------------
 # 4) EXPORT — kisi klasorlerini olustur ve fotograflari yerlestir
 # --------------------------------------------------------------------------
+def dosya_sistemi(yol):
+    """Hedefin dosya sistemi adi (NTFS / exFAT / FAT32 / APFS ...). Bulunamazsa ''."""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            kok = os.path.splitdrive(os.path.abspath(str(yol)))[0] + "\\"
+            tampon = ctypes.create_unicode_buffer(256)
+            ok = ctypes.windll.kernel32.GetVolumeInformationW(
+                ctypes.c_wchar_p(kok), None, 0, None, None, None, tampon, 256
+            )
+            return tampon.value if ok else ""
+        # macOS / Linux
+        import subprocess
+
+        cikti = subprocess.run(["df", "-T", str(yol)], capture_output=True, text=True).stdout
+        satirlar = cikti.strip().splitlines()
+        if len(satirlar) > 1:
+            return satirlar[-1].split()[1]
+    except Exception:
+        pass
+    return ""
+
+
+def hardlink_denemesi(ornek_kaynak, hedef_dizin):
+    """Hedef diskte sabit bag kurulabiliyor mu? (NTFS + ayni disk gerekir)"""
+    t = Path(hedef_dizin) / ".baglanti_testi.tmp"
+    try:
+        if t.exists():
+            t.unlink()
+        os.link(ornek_kaynak, t)
+        sonuc = True
+    except OSError:
+        sonuc = False
+    try:
+        t.unlink()
+    except OSError:
+        pass
+    return sonuc
+
+
 def cmd_export(args):
     con = db_connect(args.db)
     names = {}
@@ -361,8 +403,7 @@ def cmd_export(args):
         groups.setdefault(cid, []).append(path)
 
     if args.export_unknown:
-        unk = [r[0] for r in con.execute(
-            "SELECT DISTINCT path FROM faces WHERE cluster = -1")]
+        unk = [r[0] for r in con.execute("SELECT DISTINCT path FROM faces WHERE cluster = -1")]
         if unk:
             groups["_bilinmeyen"] = unk
     if args.export_nofaces:
@@ -370,29 +411,8 @@ def cmd_export(args):
         if nof:
             groups["_yuz_yok"] = nof
 
-    dst = Path(args.dst)
-    dst.mkdir(parents=True, exist_ok=True)
-    fallback_warned = [False]
-
-    def place(src, target):
-        if target.exists():
-            return False
-        if args.mode == "copy":
-            import shutil
-            shutil.copy2(src, target)
-            return True
-        try:
-            os.link(src, target)          # sabit bag: yer kaplamaz (ayni disk, NTFS)
-            return True
-        except OSError:
-            if not fallback_warned[0]:
-                print("  ! sabit bag kurulamadi (farkli disk olabilir), kopyalamaya gecildi.")
-                fallback_warned[0] = True
-            import shutil
-            shutil.copy2(src, target)
-            return True
-
-    total = 0
+    # ------------------------------------------------------------ plan
+    plan = []
     for cid, paths in sorted(groups.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
         if isinstance(cid, int):
             if len(paths) < args.min_photos:
@@ -402,30 +422,116 @@ def cmd_export(args):
                 folder = f"{cid:04d}_{safe_folder_name(names[cid])}"
         else:
             folder = cid
+        plan.append((folder, paths))
+
+    if not plan:
+        print("Yazilacak bir sey yok. Once 'cluster' calistirin.")
+        return
+
+    toplam_dosya = sum(len(p) for _, p in plan)
+    toplam_bayt = 0
+    for _, paths in plan:
+        for p in paths:
+            try:
+                toplam_bayt += os.path.getsize(p)
+            except OSError:
+                pass
+
+    dst = Path(args.dst)
+    dst.mkdir(parents=True, exist_ok=True)
+
+    # --------------------------------------------- yontem ve yer kontrolu
+    fs = dosya_sistemi(dst)
+    baglanti_var = hardlink_denemesi(plan[0][1][0], dst)
+    mod = args.mode
+    if mod == "auto":
+        mod = "hardlink" if baglanti_var else "copy"
+        print("  Hedef disk: %s -> %s" % (
+            fs or "bilinmiyor",
+            "sabit bag kullanilacak (yer kaplamaz)" if baglanti_var
+            else "gercek kopya olusturulacak"))
+        if not baglanti_var:
+            print("  (exFAT/FAT diskler ve farkli diskler sabit bag desteklemez - bu normaldir)")
+    elif mod == "hardlink" and not baglanti_var:
+        print("  ! Hedef disk (%s) sabit bag desteklemiyor, gercek kopyalamaya gecildi."
+              % (fs or "bilinmiyor"))
+        mod = "copy"
+
+    bos = shutil.disk_usage(dst).free
+    gereken = toplam_bayt if mod == "copy" else 0
+    GB = float(2 ** 30)
+
+    print()
+    print("=" * 64)
+    print("  YAZMA ONCESI OZET  -  henuz hicbir sey yazilmadi")
+    print("=" * 64)
+    print(f"  Hedef klasor    : {dst}")
+    print(f"  Olusacak klasor : {len(plan)} kisi")
+    print(f"  Yazilacak dosya : {toplam_dosya} adet")
+    print(f"  Yontem          : {'GERCEK KOPYA' if mod == 'copy' else 'sabit bag (yer kaplamaz)'}")
+    print(f"  Gereken alan    : {gereken / GB:.1f} GB")
+    print(f"  Diskte bos alan : {bos / GB:.1f} GB")
+    print("-" * 64)
+    for folder, paths in plan[:8]:
+        print(f"    {folder:<30} {len(paths):>5} fotograf")
+    if len(plan) > 8:
+        print(f"    ... ve {len(plan) - 8} klasor daha")
+    print("=" * 64)
+
+    if gereken > bos * 0.97:
+        print("  !! YETERSIZ DISK ALANI - islem iptal edildi.")
+        print("     Baska bir diski hedef gosterin ya da yer acin.")
+        return
+
+    if args.dry_run:
+        print("  (deneme modu: hicbir dosya yazilmadi)")
+        return
+
+    if not args.evet:
+        try:
+            print()
+            cevap = input("  Bu klasore yazilsin mi? (E = evet / h = hayir): ").strip().lower()
+        except EOFError:
+            cevap = "h"
+        if cevap not in ("", "e", "evet", "y", "yes"):
+            print("  Iptal edildi - hicbir dosya yazilmadi.")
+            return
+
+    # ------------------------------------------------------------ yazma
+    print()
+    toplam = 0
+    for folder, paths in plan:
         out = dst / folder
-        if args.dry_run:
-            print(f"  [deneme] {folder}: {len(paths)} fotograf")
-            total += len(paths)
-            continue
         out.mkdir(exist_ok=True)
         for p in paths:
             src = Path(p)
             target = out / src.name
             k = 1
-            while target.exists() and target.stat().st_size != src.stat().st_size:
-                target = out / f"{src.stem}_{k}{src.suffix}"
-                k += 1
             try:
-                if place(src, target):
-                    total += 1
+                while target.exists() and target.stat().st_size != src.stat().st_size:
+                    target = out / f"{src.stem}_{k}{src.suffix}"
+                    k += 1
+            except OSError:
+                pass
+            if target.exists():
+                continue
+            try:
+                if mod == "hardlink":
+                    os.link(src, target)
+                else:
+                    shutil.copy2(src, target)
+                toplam += 1
             except Exception as e:
-                print(f"  ! {src}: {e}")
+                print(f"  ! {src.name}: {e}")
         print(f"  {folder}: {len(paths)} fotograf")
 
-    print(f"\nTamam. {len(groups)} klasor, {total} fotograf baglantisi -> {dst}")
-    if args.mode == "hardlink" and not args.dry_run:
-        print("Not: 'hardlink' modunda fotograflar ekstra yer kaplamaz; bir klasordeki "
-              "dosyayi silmek orijinali silmez.")
+    print()
+    print(f"Tamam. {len(plan)} klasor, {toplam} dosya -> {dst}")
+    if mod == "hardlink":
+        print("Not: sabit bag modunda fotograflar ekstra yer kaplamaz; bir klasordeki")
+        print("dosyayi silmek orijinali silmez.")
+    else:
+        print("Not: gercek kopya olusturuldu; orijinal fotograflariniza dokunulmadi.")
 
 
 # --------------------------------------------------------------------------
@@ -464,11 +570,13 @@ def main():
     e.add_argument("--db", default="faces.db")
     e.add_argument("--dst", required=True)
     e.add_argument("--names", default="isimler.csv")
-    e.add_argument("--mode", choices=["hardlink", "copy"], default="hardlink")
+    e.add_argument("--mode", choices=["auto", "hardlink", "copy"], default="auto",
+                   help="auto: disk destekliyorsa sabit bag, yoksa kopya (onerilen)")
     e.add_argument("--min-photos", type=int, default=2)
     e.add_argument("--export-unknown", action="store_true", help="_bilinmeyen klasoru de olustur")
     e.add_argument("--export-nofaces", action="store_true", help="_yuz_yok klasoru de olustur")
     e.add_argument("--dry-run", action="store_true", help="dosya tasimadan sadece raporla")
+    e.add_argument("--evet", action="store_true", help="onay sormadan yaz (otomasyon icin)")
     e.set_defaults(func=cmd_export)
 
     args = ap.parse_args()

@@ -20,7 +20,7 @@ VARSAYILAN = {
     "db": str(BASE / "faces.db"),
     "eps": 0.50,
     "min_samples": 3,
-    "mod": "hardlink",
+    "mod": "auto",
     "guncelleme_url": "",
     "otomatik_guncelleme": True,
     "son_kontrol": 0,
@@ -127,6 +127,41 @@ def guncelleme_bak(sessiz=True):
             print("Guncelleme basarisiz:", e)
 
 
+def klasor_ac(yol):
+    """Sonuc klasorunu isletim sistemine gore acar (Windows / macOS / Linux)."""
+    try:
+        if os.name == "nt":
+            os.startfile(yol)
+        elif sys.platform == "darwin":
+            subprocess.call(["open", str(yol)])
+        else:
+            subprocess.call(["xdg-open", str(yol)])
+    except Exception:
+        pass
+
+
+def hedef_onayla(cfg):
+    """Yazma isleminden ONCE hedef klasoru sorar ve onaylatir."""
+    while True:
+        mevcut = cfg.get("hedef_klasor", "")
+        if mevcut:
+            print()
+            print("  Kisi klasorleri su konuma yazilacak:")
+            print("    %s" % mevcut)
+            c = input("  [E] bu klasore yaz   [D] baska klasor sec   [I] iptal : ").strip().lower()
+            if c in ("", "e", "evet"):
+                return mevcut
+            if c in ("i", "iptal"):
+                print("  Iptal edildi.")
+                return ""
+        secim = klasor_sec("Kisi klasorleri nereye olusturulsun?", mevcut)
+        if not secim:
+            print("  Klasor secilmedi, iptal edildi.")
+            return ""
+        cfg["hedef_klasor"] = secim
+        ayar_yaz(cfg)
+
+
 def tam_akis(cfg):
     if not cfg["kaynak_klasor"]:
         print("Once fotograflarin bulundugu klasoru secin (1 numarali secenek).")
@@ -140,19 +175,14 @@ def tam_akis(cfg):
         return
     print("\n[3/4] Inceleme sayfasi hazirlaniyor...")
     calistir("review", "--db", cfg["db"], "--out", str(BASE / "inceleme.html"))
-    if not cfg["hedef_klasor"]:
-        cfg["hedef_klasor"] = klasor_sec("Kisi klasorleri nereye olusturulsun?")
-        ayar_yaz(cfg)
-    if not cfg["hedef_klasor"]:
+    hedef = hedef_onayla(cfg)
+    if not hedef:
         return
     print("\n[4/4] Kisi klasorleri olusturuluyor...")
-    calistir("export", "--db", cfg["db"], "--dst", cfg["hedef_klasor"],
+    calistir("export", "--db", cfg["db"], "--dst", hedef,
              "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"])
-    print("\nBITTI! Klasorler: %s" % cfg["hedef_klasor"])
-    try:
-        os.startfile(cfg["hedef_klasor"])
-    except Exception:
-        pass
+    print("\nBITTI! Klasorler: %s" % hedef)
+    klasor_ac(hedef)
 
 
 def menu():
@@ -214,11 +244,9 @@ def menu():
             if h.exists():
                 webbrowser.open(h.as_uri())
         elif s == "7":
-            if not cfg["hedef_klasor"]:
-                cfg["hedef_klasor"] = klasor_sec("Kisi klasorleri nereye olusturulsun?")
-                ayar_yaz(cfg)
-            if cfg["hedef_klasor"]:
-                calistir("export", "--db", cfg["db"], "--dst", cfg["hedef_klasor"],
+            hedef = hedef_onayla(cfg)
+            if hedef:
+                calistir("export", "--db", cfg["db"], "--dst", hedef,
                          "--names", str(BASE / "isimler.csv"), "--mode", cfg["mod"])
         elif s == "8":
             if cfg["kaynak_klasor"]:
