@@ -125,3 +125,25 @@ Türkçe karakterli isimler konsola sorunsuz basıldı.
 
 **Henüz bilinmiyor:** AWS'in kişi veritabanının Türk dizi oyuncularını ne kadar
 kapsadığı. `isimlendir --limit 3` ile küçük bir denemeyle ölçülmeli.
+
+### Gerçek veriyle ölçüm (296 fotoğraf, 11 kişi)
+
+| küme | öneri | güven | oy |
+|---|---|---|---|
+| 1 | Burak Hakkı | %99.7 | 3/3 |
+| 7 | Troy Glaus *(yanlış — Amerikalı beyzbolcu)* | %87.2 | 2/3 |
+| diğer 9 | tanınmadı | — | — |
+
+İki ders çıktı:
+
+**1. AWS Türk oyuncularını biliyor.** Kapsama tam değil (11 kişiden 1'i), ama çalışıyor.
+
+**2. Kalabalık karelerde kırpma tuzağı var — düzeltildi.** Geniş kırpma yandaki kişinin
+yüzünü de içine alıyordu ve AWS *onu* tanıyıp hedef kişiye yapıştırıyordu. Küme 2'de
+"Burak Hakkı" kırpmanın sol kenarında (`Left=-0.00`) bulunmuştu; ortadaki asıl yüz ise
+tanınmamıştı. Artık `yuz_kirp_jpeg` hedef yüzün kırpma içindeki kutusunu da döndürüyor,
+AWS'in verdiği kutuyla IoU karşılaştırılıyor (`--ortusme`, varsayılan 0.35) ve
+örtüşmeyen eşleşmeler eleniyor. Düzeltmeden sonra küme 2 doğru şekilde "tanınmadı" oldu.
+
+**Eşik `--esik` varsayılanı 95** yapıldı: doğru eşleşme %99.7, yanlış eşleşme %87.2 geldi.
+Bu iki veri noktasına dayanıyor — daha çok veri gelince gözden geçirilmeli.

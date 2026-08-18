@@ -1,16 +1,16 @@
 {
-  "surum": "1.3.0",
-  "notlar": "Isim onerisi AWS Rekognition'a gecti (Google web detection bu is icin calismiyordu)",
+  "surum": "1.4.0",
+  "notlar": "Hedef yuz dogrulamasi: kalabalik karelerde yandaki kisinin ismi yapistirilmiyor; guven esigi 95",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "ed9a04ceeff019f8d93ef293929565d7c0fd52d8dfd196e1441ebafdd5331400"
+      "sha256": "62451b5f89fbf28fb0977d87190b88d3fcceec8fc44ee5c2d74ba4c30eaf0a7f"
     },
     {
       "ad": "tanima.py",
       "url": "tanima.py",
-      "sha256": "4d3c29d1eaba23ab0694b8ecb893e4ec29337b648ac5b33513adc334c90d695d"
+      "sha256": "551e4e5d7cfb9b0ed4ab216abd663b5bb77cc900f92f274b442cf8fab28ba9a1"
     },
     {
       "ad": "baslat.py",

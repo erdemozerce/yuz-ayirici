@@ -95,8 +95,9 @@ def hazirla(bolge=None, klasor=None):
 
 def sorgula(istemci, jpeg_baytlari):
     """
-    Bir yuz kirpmasi icin taninan kisileri dondurur:
-        [(isim, guven_yuzde, [baglantilar]), ...]  - en iyi eslesme basta
+    Bir kirpma icin taninan kisiler:
+        [(isim, guven_yuzde, [baglantilar], (sol, ust, genislik, yukseklik)), ...]
+    Kutu, kirpmaya gore 0-1 arasi orandir; hangi yuzun tanindigini anlamak icin.
     """
     from botocore.exceptions import BotoCoreError, ClientError
 
@@ -115,16 +116,14 @@ def sorgula(istemci, jpeg_baytlari):
     sonuc = []
     for k in cevap.get("CelebrityFaces", []) or []:
         kutu = (k.get("Face") or {}).get("BoundingBox") or {}
-        alan = float(kutu.get("Width", 0)) * float(kutu.get("Height", 0))
         sonuc.append((
             (k.get("Name") or "").strip(),
             float(k.get("MatchConfidence") or 0.0),
             list(k.get("Urls") or []),
-            alan,
+            (float(kutu.get("Left", 0)), float(kutu.get("Top", 0)),
+             float(kutu.get("Width", 0)), float(kutu.get("Height", 0))),
         ))
-    # kirpmanin ortasindaki (en buyuk) yuz once gelsin
-    sonuc.sort(key=lambda t: -t[3])
-    return [(a, g, u) for a, g, u, _ in sonuc]
+    return sonuc
 
 
 def taninmayan_sayisi(istemci_cevabi):

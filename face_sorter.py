@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import argparse
 import base64
@@ -299,12 +299,16 @@ def kume_ornekleri(con, cid, adet):
     return [rows[i][:5] for i in sira]
 
 
-def yuz_kirp_jpeg(kayit, marj=1.1, hedef=900, kalite=88):
-    """Yuzu bol paylı kirpar, JPEG baytlari dondurur. Okunamazsa None."""
+def yuz_kirp_jpeg(kayit, marj=0.6, hedef=900, kalite=88):
+    """
+    Yuzu paylı kirpar. Dondurur: (jpeg_baytlari, hedef_kutu)
+    hedef_kutu = kirpma icindeki HEDEF yuzun konumu (sol, ust, gen, yuk) 0-1 orani.
+    Okunamazsa (None, None).
+    """
     p, x1, y1, x2, y2 = kayit
     img = imread_unicode(p)
     if img is None:
-        return None
+        return None, None
     h, w = img.shape[:2]
     gen = x2 - x1
     yuk = y2 - y1
@@ -314,14 +318,29 @@ def yuz_kirp_jpeg(kayit, marj=1.1, hedef=900, kalite=88):
     cy2 = min(int(y2 + yuk * marj * 1.4), h)
     kirpma = img[cy1:cy2, cx1:cx2]
     if kirpma.size == 0:
-        return None
-    k = max(kirpma.shape[:2])
+        return None, None
+    kh, kw = kirpma.shape[:2]
+    hedef_kutu = ((x1 - cx1) / kw, (y1 - cy1) / kh, gen / kw, yuk / kh)
+
+    k = max(kh, kw)
     if k > hedef:
         o = hedef / k
-        kirpma = cv2.resize(kirpma, (int(kirpma.shape[1] * o), int(kirpma.shape[0] * o)),
-                            interpolation=cv2.INTER_AREA)
+        kirpma = cv2.resize(kirpma, (int(kw * o), int(kh * o)), interpolation=cv2.INTER_AREA)
     ok, buf = cv2.imencode(".jpg", kirpma, [cv2.IMWRITE_JPEG_QUALITY, kalite])
-    return buf.tobytes() if ok else None
+    return (buf.tobytes() if ok else None), hedef_kutu
+
+
+def kutu_ortusmesi(a, b):
+    """Iki kutunun kesisim/birlesim orani (IoU). Kutu = (sol, ust, gen, yuk)."""
+    ax1, ay1, ax2, ay2 = a[0], a[1], a[0] + a[2], a[1] + a[3]
+    bx1, by1, bx2, by2 = b[0], b[1], b[0] + b[2], b[1] + b[3]
+    kx1, ky1 = max(ax1, bx1), max(ay1, by1)
+    kx2, ky2 = min(ax2, bx2), min(ay2, by2)
+    if kx2 <= kx1 or ky2 <= ky1:
+        return 0.0
+    kesisim = (kx2 - kx1) * (ky2 - ky1)
+    birlesim = a[2] * a[3] + b[2] * b[3] - kesisim
+    return kesisim / birlesim if birlesim > 0 else 0.0
 
 
 def isim_csv_oku(yol):
@@ -416,9 +435,9 @@ def cmd_identify(args):
     bulunan = hata = 0
     for sira, (cid, nfoto) in enumerate(kumeler, 1):
         ornekler = kume_ornekleri(con, cid, args.samples)
-        oylar, kullanilan = {}, 0
+        oylar, kullanilan, elenen = {}, 0, [0]
         for kayit in ornekler:
-            jpeg = yuz_kirp_jpeg(kayit)
+            jpeg, hedef_kutu = yuz_kirp_jpeg(kayit)
             if jpeg is None:
                 continue
             try:
@@ -433,7 +452,19 @@ def cmd_identify(args):
             kullanilan += 1
             if not eslesmeler:
                 continue
-            isim, guven, baglantilar = eslesmeler[0]
+
+            # AWS goruntudeki BASKA bir yuzu tanimis olabilir (kalabalik kareler).
+            # Sadece hedef yuzle ortusen eslesmeyi kabul et.
+            en_uygun, en_ortusme = None, 0.0
+            for isim, guven, baglantilar, kutu in eslesmeler:
+                ort = kutu_ortusmesi(kutu, hedef_kutu)
+                if ort > en_ortusme:
+                    en_uygun, en_ortusme = (isim, guven, baglantilar), ort
+            if en_uygun is None or en_ortusme < args.ortusme:
+                elenen[0] += len(eslesmeler)
+                continue
+
+            isim, guven, baglantilar = en_uygun
             if not isim or guven < args.esik:
                 continue
             kayitlar = oylar.setdefault(isim, [0, 0.0, baglantilar])
@@ -464,6 +495,8 @@ def cmd_identify(args):
                 (cid, None, ort_guven, oy, kullanilan, ""),
             )
             not_ = "taninmadi" if not en_iyi else "tutarsiz (%d/%d karede)" % (oy, kullanilan)
+            if elenen[0]:
+                not_ += "  [%d eslesme baska yuze aitti, elendi]" % elenen[0]
             print("  [%d/%d] kisi_%04d (%d foto) -> %s"
                   % (sira, len(kumeler), cid, nfoto, not_))
         con.commit()
@@ -858,9 +891,12 @@ def main():
     i.add_argument("--names", default="isimler.csv")
     i.add_argument("--samples", type=int, default=3, help="kisi basina sorgulanacak kare")
     i.add_argument("--min-photos", type=int, default=3, help="bu kadar fotografta gorunmeyeni sorma")
-    i.add_argument("--esik", type=float, default=85.0,
-                   help="eslesme guven esigi, yuzde (varsayilan 85)")
+    i.add_argument("--esik", type=float, default=95.0,
+                   help="eslesme guven esigi, yuzde (varsayilan 95). Gercek veride "
+                        "dogru eslesme %99.7, yanlis eslesme %87.2 cikti - 95 ikisini ayirir.")
     i.add_argument("--bolge", default="us-east-1", help="AWS bolgesi")
+    i.add_argument("--ortusme", type=float, default=0.35,
+                   help="taninan yuz hedef yuzle en az bu kadar ortusmeli (IoU)")
     i.add_argument("--limit", type=int, default=0, help="sadece ilk N kisiyi sorgula (deneme)")
     i.add_argument("--yeniden", action="store_true", help="daha once sorulanlari tekrar sor")
     i.add_argument("--evet", action="store_true", help="onay sormadan basla")
