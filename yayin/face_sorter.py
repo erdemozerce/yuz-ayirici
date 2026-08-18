@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.12.1"
+__version__ = "1.12.2"
 
 import argparse
 import base64
@@ -165,12 +165,32 @@ def raw_oku(path, en_az=800):
         return None
 
 
-def imread_unicode(path):
-    """Turkce/Rusca karakterli dosya yollarini da okuyabilen imread."""
+def imread_unicode(path, kucult=0):
+    """
+    Turkce/Rusca karakterli dosya yollarini da okuyabilen imread.
+
+    kucult: 0 = tam cozunurluk. >0 verilirse ve dosya cok buyukse JPEG
+    codec'ine YARIM/CEYREK cozunurlukte cozdurulur - tam cozup sonra
+    kucultmekten belirgin sekilde hizlidir (olculdu).
+    Dondurur: (goruntu, olcek)  olcek = goruntu / orijinal
+    """
     if Path(path).suffix.lower() in RAW_EXT:
-        return raw_oku(path)
+        img = raw_oku(path)
+        return (img, 1.0) if kucult else img
     try:
         data = np.fromfile(str(path), dtype=np.uint8)
+        if kucult:
+            # once basligi okuyup boyuta gore azaltma seviyesi sec
+            img = cv2.imdecode(data, cv2.IMREAD_REDUCED_COLOR_2)
+            if img is not None:
+                if max(img.shape[:2]) >= kucult * 2:
+                    kucuk = cv2.imdecode(data, cv2.IMREAD_REDUCED_COLOR_4)
+                    if kucuk is not None and max(kucuk.shape[:2]) >= kucult:
+                        return kucuk, 0.25
+                if max(img.shape[:2]) >= kucult:
+                    return img, 0.5
+            tam = cv2.imdecode(data, cv2.IMREAD_COLOR)
+            return tam, 1.0
         img = cv2.imdecode(data, cv2.IMREAD_COLOR)
         if img is not None:
             return img
@@ -186,9 +206,10 @@ def imread_unicode(path):
             pass
         with Image.open(str(path)) as im:
             im = im.convert("RGB")
-            return cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
+            sonuc = cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
+            return (sonuc, 1.0) if kucult else sonuc
     except Exception:
-        return None
+        return (None, 1.0) if kucult else None
 
 
 def list_images(kaynaklar):
@@ -335,6 +356,65 @@ def cekim_zamani(yol):
 
 
 # --------------------------------------------------------------------------
+# Coklu surec: her isci modeli bir kez yukler, ONNX'i tek is parcacigina sabitler
+# (yoksa 8 isci x 8 is parcacigi = asiri abonelik, yavaslar).
+# --------------------------------------------------------------------------
+_ISCI = {}
+
+
+def _isci_baslat(model, gpu, det_size, max_side):
+    import onnxruntime
+    from insightface.app import FaceAnalysis
+    onnxruntime.set_default_logger_severity(3)
+    secenek = onnxruntime.SessionOptions()
+    secenek.intra_op_num_threads = 1
+    secenek.inter_op_num_threads = 1
+    cv2.setNumThreads(1)
+    saglayici = (["CUDAExecutionProvider", "CPUExecutionProvider"] if gpu
+                 else ["CPUExecutionProvider"])
+    app = FaceAnalysis(name=model, providers=saglayici,
+                       allowed_modules=["detection", "recognition",
+                                        "landmark_2d_106", "landmark_3d_68"])
+    app.prepare(ctx_id=0 if gpu else -1, det_size=(det_size, det_size))
+    _ISCI["app"] = app
+    _ISCI["max_side"] = max_side
+
+
+def _isci_isle(gorev):
+    """Tek fotografi isler. (yol, mtime, size, kok, esler) -> sonuc sozlugu."""
+    path, mtime, size, kok, esler = gorev
+    app = _ISCI["app"]
+    max_side = _ISCI["max_side"]
+    status, rows, imza = "ok", [], None
+    try:
+        img, oku_olcek = imread_unicode(path, kucult=max_side)
+        if img is None:
+            return {"path": path, "mtime": mtime, "size": size, "kok": kok,
+                    "esler": esler, "status": "okunamadi", "rows": [], "imza": None}
+        h, w = img.shape[:2]
+        olcek = oku_olcek
+        if max(h, w) > max_side:
+            o = max_side / max(h, w)
+            img = cv2.resize(img, (int(w * o), int(h * o)), interpolation=cv2.INTER_AREA)
+            olcek *= o
+        imza = gorsel_imza(img)
+        for f in app.get(img):
+            bb = f.bbox.astype(float)
+            det_w = float(bb[2] - bb[0])
+            x1, y1, x2, y2 = (bb / olcek).tolist()      # gercek orijinal koordinat
+            poz = getattr(f, "pose", None)
+            rows.append((path, x1, y1, x2, y2, float(f.det_score), det_w,
+                         np.asarray(f.normed_embedding, dtype=np.float32).tobytes(),
+                         yuz_netligi(img, bb), goz_aciklik(f),
+                         float(poz[1]) if poz is not None else None,
+                         float(poz[0]) if poz is not None else None))
+    except Exception as e:
+        status = "hata: %s" % type(e).__name__
+    return {"path": path, "mtime": mtime, "size": size, "kok": kok, "esler": esler,
+            "status": status, "rows": rows, "imza": imza}
+
+
+# --------------------------------------------------------------------------
 # 1) SCAN — yuzleri bul ve vektorlerini kaydet
 # --------------------------------------------------------------------------
 def cmd_scan(args):
@@ -369,67 +449,56 @@ def cmd_scan(args):
     if not todo:
         return
 
-    providers = (
-        ["CUDAExecutionProvider", "CPUExecutionProvider"] if args.gpu else ["CPUExecutionProvider"]
-    )
-    print(f"Model yukleniyor ({args.model}, {'GPU' if args.gpu else 'CPU'})...")
-    app = FaceAnalysis(name=args.model, providers=providers)
-    app.prepare(ctx_id=0 if args.gpu else -1, det_size=(args.det_size, args.det_size))
+    isci = args.isci if args.isci > 0 else max(1, min((os.cpu_count() or 2) - 1, 4))
+    if len(todo) < 8:
+        isci = 1
+    print(f"Model yukleniyor ({args.model}, {'GPU' if args.gpu else 'CPU'}, "
+          f"{isci} surec)...")
 
-    t0 = time.time()
-    n_faces_total = 0
-    for i, (path, mtime, size, kok, esler) in enumerate(todo, 1):
-        status, faces = "ok", []
-        img = imread_unicode(path)
-        if img is None:
-            status = "okunamadi"
-        else:
-            try:
-                h, w = img.shape[:2]
-                scale = 1.0
-                if max(h, w) > args.max_side:
-                    scale = args.max_side / max(h, w)
-                    img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-                faces = app.get(img)
-            except Exception as e:
-                status = f"hata: {type(e).__name__}"
-
-        rows = []
-        imza = gorsel_imza(img) if img is not None and status == "ok" else None
-        for f in faces:
-            bb = f.bbox.astype(float)
-            det_w = float(bb[2] - bb[0])                 # islenen goruntudeki genislik
-            x1, y1, x2, y2 = (bb / scale).tolist()       # orijinal koordinatlara geri
-            emb = np.asarray(f.normed_embedding, dtype=np.float32)
-            poz = getattr(f, "pose", None)
-            rows.append((path, x1, y1, x2, y2, float(f.det_score), det_w, emb.tobytes(),
-                         yuz_netligi(img, bb), goz_aciklik(f),
-                         float(poz[1]) if poz is not None else None,
-                         float(poz[0]) if poz is not None else None))
-
-        con.execute("DELETE FROM faces WHERE path = ?", (path,))
-        if rows:
+    def kaydet(sonuc, sayac):
+        con.execute("DELETE FROM faces WHERE path = ?", (sonuc["path"],))
+        if sonuc["rows"]:
             con.executemany(
                 "INSERT INTO faces(path,x1,y1,x2,y2,det_score,det_w,emb,"
-                "netlik,goz,yaw,pitch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows
-            )
+                "netlik,goz,yaw,pitch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", sonuc["rows"])
         con.execute(
             "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok,esler,"
             "imza,zaman) VALUES(?,?,?,?,?,?,?,?,?)",
-            (path, mtime, size, len(rows), status, kok,
-             "|".join(esler) if esler else None, imza, cekim_zamani(path)),
-        )
-        n_faces_total += len(rows)
+            (sonuc["path"], sonuc["mtime"], sonuc["size"], len(sonuc["rows"]),
+             sonuc["status"], sonuc["kok"],
+             "|".join(sonuc["esler"]) if sonuc["esler"] else None,
+             sonuc["imza"], cekim_zamani(sonuc["path"])))
+        return sayac + len(sonuc["rows"])
 
-        if i % 20 == 0 or i == len(todo):
-            con.commit()
-            hiz = i / (time.time() - t0)
-            kalan = (len(todo) - i) / max(hiz, 1e-6)
-            print(
-                f"  [{i}/{len(todo)}] {hiz:.2f} foto/sn | {n_faces_total} yuz | "
-                f"tahmini kalan: {fmt_eta(kalan)}",
-                flush=True,
-            )
+    t0 = time.time()
+    n_faces_total = 0
+    i = 0
+
+    if isci == 1:
+        _isci_baslat(args.model, args.gpu, args.det_size, args.max_side)
+        for gorev in todo:
+            i += 1
+            n_faces_total = kaydet(_isci_isle(gorev), n_faces_total)
+            if i % 20 == 0 or i == len(todo):
+                con.commit()
+                hiz = i / (time.time() - t0)
+                print(f"  [{i}/{len(todo)}] {hiz:.2f} foto/sn | {n_faces_total} yuz | "
+                      f"tahmini kalan: {fmt_eta((len(todo) - i) / max(hiz, 1e-6))}", flush=True)
+    else:
+        import concurrent.futures as cf
+        with cf.ProcessPoolExecutor(
+                max_workers=isci, initializer=_isci_baslat,
+                initargs=(args.model, args.gpu, args.det_size, args.max_side)) as havuz:
+            for sonuc in havuz.map(_isci_isle, todo, chunksize=1):
+                i += 1
+                n_faces_total = kaydet(sonuc, n_faces_total)
+                if i % 20 == 0 or i == len(todo):
+                    con.commit()
+                    hiz = i / (time.time() - t0)
+                    print(f"  [{i}/{len(todo)}] {hiz:.2f} foto/sn | {n_faces_total} yuz | "
+                          f"tahmini kalan: {fmt_eta((len(todo) - i) / max(hiz, 1e-6))}",
+                          flush=True)
+
     con.commit()
     print(f"Bitti. Toplam {n_faces_total} yuz kaydedildi -> {args.db}")
 
@@ -1639,6 +1708,8 @@ def main():
     s.add_argument("--det-size", type=int, default=640)
     s.add_argument("--max-side", type=int, default=1600, help="isleme oncesi kucultme sinirini belirler")
     s.add_argument("--limit", type=int, default=0, help="deneme icin ilk N fotograf")
+    s.add_argument("--isci", type=int, default=0,
+                   help="es zamanli surec sayisi (0 = otomatik, cekirdek-1, en fazla 4)")
     s.set_defaults(func=cmd_scan)
 
     c = sub.add_parser("cluster", help="yuzleri kisilere gore grupla")

@@ -117,7 +117,16 @@
       <div class="altbaslik">Fotoğrafları kişilere göre klasörler — her şey bu bilgisayarda</div>
     </div>
     <div class="rozet" id="rozet">hazır</div>
+    <div class="rozet" id="surum-rozet" title="Programın sürümü">sürüm …</div>
   </header>
+
+  <div id="guncelleme" class="gizli" style="background:rgba(79,140,255,.12);
+       border:1px solid var(--vurgu);color:var(--yazi);padding:13px 16px;
+       border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <b id="guncelleme-yazi">Yeni sürüm var</b>
+    <span id="guncelleme-not" style="color:var(--soluk);font-size:13px"></span>
+    <button class="ana" style="margin-left:auto" onclick="guncelle()">Şimdi güncelle</button>
+  </div>
 
   <div id="uyari" class="uyari gizli"></div>
 
@@ -240,6 +249,7 @@
       <button id="b-onizle" onclick="baslat('onizleme')">Önce hesapla (hiçbir şey yazmaz)</button>
       <button class="ana" id="b-klasorle" onclick="klasorleOnayla()">Klasörleri Oluştur</button>
       <button onclick="post('/api/klasor-ac')">Çıktı klasörünü aç</button>
+      <button onclick="guncellemeKontrol()">Güncelleme var mı?</button>
     </div>
     <div class="ipucu">
       <b>Alt klasör → kişi</b> düzeninde her bölüm/çekim klasörü kendi içinde kişilere ayrılır;
@@ -345,6 +355,16 @@ async function durumGuncelle(){
   $("#bilinen-isimler").innerHTML =
     (d.kutuphane_isimleri||[]).map(i=>`<option value="${i.replace(/"/g,"&quot;")}">`).join("");
 
+  if(d.surum){
+    $("#surum-rozet").textContent = "sürüm " + d.surum.yerel;
+    const yeni = d.surum.yeni;
+    $("#guncelleme").classList.toggle("gizli", !yeni);
+    if(yeni){
+      $("#guncelleme-yazi").textContent = "Yeni sürüm hazır: " + yeni;
+      $("#guncelleme-not").textContent = d.surum.notlar || "";
+      $("#surum-rozet").textContent = "sürüm " + d.surum.yerel + " → " + yeni;
+    }
+  }
   calisiyor = d.calisiyor;
   $("#rozet").textContent = calisiyor ? d.adim + "…" : "hazır";
   $("#ilerleme-kutu").classList.toggle("gizli", !calisiyor && !d.satirlar.length);
@@ -376,6 +396,19 @@ async function durumGuncelle(){
       if(!d.hata) uyar("");
     }
   }
+}
+
+async function guncellemeKontrol(){
+  const c = await post("/api/guncelle", {});
+  uyar(c.mesaj || "");
+  durumGuncelle();
+}
+async function guncelle(){
+  if(!confirm("Yeni sürüm indirilip kurulacak.\n\nAyarların, isimlerin ve kişi " +
+              "kütüphanen korunur. Devam?")) return;
+  const c = await post("/api/guncelle", {islem:"uygula"});
+  alert(c.mesaj || (c.ok ? "Güncellendi." : "Güncelleme yapılamadı."));
+  durumGuncelle();
 }
 
 async function kisileriYukle(){

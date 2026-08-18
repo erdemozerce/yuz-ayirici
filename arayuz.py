@@ -55,6 +55,53 @@ dialog_kuyrugu = queue.Queue()
 surec = {"p": None}
 
 
+def surum_bilgisi():
+    """Yerel surum ve (varsa) bekleyen guncelleme."""
+    d = {"yerel": "?", "yeni": None, "notlar": "", "kontrol": False}
+    try:
+        import guncelle
+        d["yerel"] = guncelle.yerel_surum()
+        d["kontrol"] = bool(guncelle.ayarlari_oku().get("guncelleme_url"))
+    except Exception:
+        pass
+    d.update(_guncelleme_durumu)
+    return d
+
+
+_guncelleme_durumu = {}
+
+
+def guncelleme_ara(zorla=False):
+    """Arka planda yeni surum var mi diye bakar; arayuze bildirir."""
+    try:
+        import guncelle
+        m = guncelle.kontrol_et() if zorla else guncelle.gunluk_kontrol()
+        if m:
+            _guncelleme_durumu["yeni"] = m.get("surum")
+            _guncelleme_durumu["notlar"] = m.get("notlar", "")
+            _guncelleme_durumu["_manifest"] = m
+        elif zorla:
+            _guncelleme_durumu["yeni"] = None
+            _guncelleme_durumu["notlar"] = ""
+        return _guncelleme_durumu.get("yeni")
+    except Exception as e:
+        _guncelleme_durumu["hata"] = str(e)
+        return None
+
+
+def guncellemeyi_uygula():
+    try:
+        import guncelle
+        m = _guncelleme_durumu.get("_manifest") or guncelle.kontrol_et()
+        if not m:
+            return False, "Guncel surum kullaniliyor."
+        guncelle.uygula(m, log=lambda *x: None)
+        _guncelleme_durumu.clear()
+        return True, "Surum %s kuruldu. Programi kapatip yeniden acin." % m.get("surum")
+    except Exception as e:
+        return False, str(e)
+
+
 def ayar_oku():
     varsayilan = {
         "kaynak_klasorler": [], "kaynak_klasor": "", "hedef_klasor": "",
@@ -297,6 +344,7 @@ class Vekil(BaseHTTPRequestHandler):
             d["ozet"] = ozet()
             d["ayar"] = ayar_oku()
             d["kutuphane_isimleri"] = kutuphane_isimleri()
+            d["surum"] = surum_bilgisi()
             return self._json(d)
         if u.path == "/api/kisiler":
             return self._json({"kisiler": kisiler_listesi()})
@@ -384,6 +432,15 @@ class Vekil(BaseHTTPRequestHandler):
                 return self._json({"ok": is_calistir("Yuz cikariliyor", [
                     "cikar", "--db", db, "--names", isimler, "--yuz"] + yuzler)})
             return self._json({"hata": "bilinmeyen islem"}, 400)
+
+        if u.path == "/api/guncelle":
+            if veri.get("islem") == "uygula":
+                ok, mesaj = guncellemeyi_uygula()
+                return self._json({"ok": ok, "mesaj": mesaj})
+            yeni = guncelleme_ara(zorla=True)
+            return self._json({"yeni": yeni,
+                               "mesaj": ("Yeni surum: %s" % yeni) if yeni
+                                        else "Program guncel."})
 
         if u.path == "/api/durdur":
             return self._json({"ok": durdur()})
@@ -475,6 +532,7 @@ def main():
     print("   " + adres)
     print()
     print("Bu pencereyi KAPATMAYIN - program burada calisiyor.")
+    threading.Thread(target=guncelleme_ara, daemon=True).start()
     webbrowser.open(adres)
 
     # tkinter pencereleri ANA is parcaciginda acilmali
