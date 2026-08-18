@@ -157,7 +157,9 @@ def acilabilir(yol):
     except OSError:
         zaman = None
 
-    if yol.isascii():
+    # macOS/Linux'ta exiv2 dosya adlarini UTF-8 olarak isler; sorun yalniz
+    # Windows'un ANSI kod sayfasinda. Orada gereksiz kopyalama yapmayalim.
+    if os.name != "nt" or yol.isascii():
         try:
             yield yol
         finally:

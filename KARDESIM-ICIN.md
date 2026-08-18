@@ -273,6 +273,27 @@ Lightroom'da ve yapımın sisteminde görünür.
 
 ---
 
+## 3i. Kimin kaç karesi var, kim kiminle?
+
+Komut satırında `rapor` yazınca: kişi başına kaç fotoğraf, **kim kiminle birlikte
+en çok görünmüş**, hangi klasörde kaç kare olduğunu tek ekranda görürsün.
+
+`ara --kisi Ahmet Ayşe` ise ikisinin **birlikte** olduğu kareleri listeler ve
+istersen bir dosyaya yazar.
+
+## 3j. Kütüphaneni yedekle
+
+Program tanıdığı kişileri `kisi_kutuphanesi.db` dosyasında tutuyor. Bilgisayar
+değiştirirsen ya da bir aksilik olursa diye yedekleyebilirsin:
+
+- Yedekle: `kisiler --disa-aktar yedek.json`
+- Geri yükle: `kisiler --ice-aktar yedek.json`
+
+Yedek dosyası **fotoğraf içermez**, sadece yüzlerden çıkarılan sayıları tutar.
+Geri yüklerken mevcut kütüphanenin üstüne yazmaz, birleştirir.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:

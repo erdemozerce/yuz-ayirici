@@ -174,3 +174,43 @@ def tani(kayitli, E, esik=ESIK, fark=FARK):
     if en_iyi[0] - ikinci < fark and len(puanlar) > 1:
         return None, en_iyi[0], ikinci, "iki kisiye birden benziyor, emin degil"
     return en_iyi[1], en_iyi[0], ikinci, "eslesti"
+
+
+def disa_aktar(con, yol):
+    """
+    Kutuphaneyi tasinabilir tek dosyaya yazar (yuz vektorleri base64).
+    Fotograf icermez; sadece sayilar - geri fotografa cevrilemez.
+    """
+    import base64
+    import json
+    veri = {"surum": 1, "tarih": _simdi(), "kisiler": []}
+    for isim, E in herkes(con):
+        veri["kisiler"].append({
+            "isim": isim,
+            "ornek": len(E),
+            "vektorler": base64.b64encode(
+                np.asarray(E, dtype=np.float32).tobytes()).decode("ascii"),
+        })
+    Path(yol).write_text(json.dumps(veri, ensure_ascii=False), encoding="utf-8")
+    return len(veri["kisiler"])
+
+
+def ice_aktar(con, yol):
+    """Yedegi yukler. Ayni isim varsa ornekleri BIRLESTIRIR, ustune yazmaz."""
+    import base64
+    import json
+    veri = json.loads(Path(yol).read_text(encoding="utf-8"))
+    mevcut = {i for i, _, _, _ in liste(con)}
+    eklenen = guncellenen = 0
+    for k in veri.get("kisiler", []):
+        isim = (k.get("isim") or "").strip()
+        if not isim:
+            continue
+        ham = base64.b64decode(k["vektorler"])
+        E = np.frombuffer(ham, dtype=np.float32).reshape(-1, 512)
+        ogret(con, isim, E, kaynak="yedek")
+        if isim in mevcut:
+            guncellenen += 1
+        else:
+            eklenen += 1
+    return eklenen, guncellenen

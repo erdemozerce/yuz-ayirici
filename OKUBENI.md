@@ -394,3 +394,32 @@ plandaki küçük yüzler kaçabilir — kullanıcı bilerek seçmeli.
 
 **Gerçek büyük kazanç GPU'da.** NVIDIA kartı olan makinede `KUR.bat` otomatik olarak
 `onnxruntime-gpu` kuruyor; beklenen kazanç 5–10 kat.
+
+## Arama, istatistik, yedekleme ve macOS (v1.14.0)
+
+### 10 · Rapor ve arama
+
+`rapor` — kişi sayıları, **kim kiminle birlikte** (birlikte görünme sayıları),
+klasör dağılımı, seçki/veto özeti.
+`ara --kisi Ahmet Ayse` — hepsinin birden göründüğü kareler (`--herhangi` ile
+en az biri). `--dosyaya liste.txt` çıktıyı dosyaya yazar; o dosya doğrudan
+`onay --dosya` ya da teslim akışına verilebilir.
+
+### 11 · Kütüphane yedekleme / taşıma
+
+`kisiler --disa-aktar yedek.json` / `--ice-aktar yedek.json`.
+Tek JSON dosyası, yüz vektörleri base64; **fotoğraf içermez**, geri fotoğrafa
+çevrilemez. İçe aktarma **birleştirir**, üzerine yazmaz — aynı isim varsa örnekler
+eklenir. Test: 2 kişi dışa aktarıldı (33 KB), boş kütüphaneye yüklendi, geri
+yüklenen kütüphane iki kişiyi de tanıdı.
+
+### 9 · macOS
+
+- `kur.py` macOS'ta `.command` başlatıcı üretir ve Masaüstüne kısayol koyar
+- Klasör açma `open` ile (Windows'ta `startfile`, Linux'ta `xdg-open`)
+- `etiket.acilabilir()` macOS/Linux'ta gereksiz kopyalama yapmaz — Unicode dosya
+  adı sorunu yalnızca Windows'un ANSI kod sayfasında var
+- Kontak baskısı fontu birden çok yolda aranıyor (macOS'ta Arial farklı konumda)
+
+**Not:** macOS'ta test edilmedi (elimizde Mac yok). Kod platform ayrımlarını
+yapıyor ama gerçek makinede denenmeli.

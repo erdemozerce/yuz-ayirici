@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.13.0"
+__version__ = "1.14.0"
 
 import argparse
 import base64
@@ -734,6 +734,17 @@ def cmd_kisiler(args):
     import kutuphane
 
     kcon = kutuphane.ac(args.kutuphane)
+
+    if args.disa_aktar:
+        n = kutuphane.disa_aktar(kcon, args.disa_aktar)
+        print("%d kisi disa aktarildi -> %s" % (n, args.disa_aktar))
+        print("Bu dosyayi baska bir bilgisayara tasiyip --ice-aktar ile yukleyebilirsiniz.")
+        return
+    if args.ice_aktar:
+        eklenen, guncellenen = kutuphane.ice_aktar(kcon, args.ice_aktar)
+        print("%d yeni kisi eklendi, %d kisi guncellendi." % (eklenen, guncellenen))
+        return
+
     if args.sil:
         if kutuphane.sil(kcon, args.sil):
             print("Silindi: %s" % args.sil)
@@ -1361,6 +1372,136 @@ def hardlink_denemesi(ornek_kaynak, hedef_dizin):
     return sonuc
 
 
+def cmd_rapor(args):
+    """Kimler var, kim kiminle birlikte, hangi klasorde kac kare."""
+    con = db_connect(args.db)
+    isimler = isim_csv_oku(args.names or "isimler.csv")
+
+    def ad(cid):
+        return isimler.get(cid) or ("kisi_%04d" % cid)
+
+    kisiler = con.execute(
+        "SELECT cluster, COUNT(DISTINCT path), COUNT(*) FROM faces WHERE cluster > 0 "
+        "GROUP BY cluster ORDER BY COUNT(DISTINCT path) DESC").fetchall()
+    if not kisiler:
+        print("Once tarama ve gruplama yapin.")
+        return
+
+    toplam_foto = con.execute("SELECT COUNT(*) FROM files WHERE n_faces > 0").fetchone()[0]
+    tum_foto = con.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+
+    print()
+    print("=" * 70)
+    print("  RAPOR")
+    print("=" * 70)
+    print("  Fotograf        : %d (yuz iceren: %d)" % (tum_foto, toplam_foto))
+    print("  Kisi            : %d   (isim verilmis: %d)"
+          % (len(kisiler), sum(1 for c, _, _ in kisiler if isimler.get(c))))
+    try:
+        s_ = con.execute("SELECT COUNT(*) FROM secki WHERE bayrak != ''").fetchone()[0]
+        if s_:
+            print("  Secki isaretli  : %d kare" % s_)
+    except Exception:
+        pass
+    try:
+        v = con.execute("SELECT COUNT(*) FROM onay WHERE durum='red'").fetchone()[0]
+        if v:
+            print("  Vetolu          : %d kare" % v)
+    except Exception:
+        pass
+
+    print()
+    print("  KISILER" + " " * 26 + "fotograf   yuz")
+    print("  " + "-" * 66)
+    for cid, nfoto, nyuz in kisiler[:args.limit or 25]:
+        print("  %-40s %6d %6d" % (ad(cid)[:40], nfoto, nyuz))
+    if len(kisiler) > (args.limit or 25):
+        print("  ... ve %d kisi daha" % (len(kisiler) - (args.limit or 25)))
+
+    # --- kim kiminle birlikte
+    beraber = {}
+    kare_kisi = {}
+    for cid, yol in con.execute(
+            "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+        kare_kisi.setdefault(yol, set()).add(cid)
+    for kumeler in kare_kisi.values():
+        k = sorted(kumeler)
+        for i in range(len(k)):
+            for j in range(i + 1, len(k)):
+                beraber[(k[i], k[j])] = beraber.get((k[i], k[j]), 0) + 1
+    if beraber:
+        print()
+        print("  BIRLIKTE EN COK GORUNENLER")
+        print("  " + "-" * 66)
+        for (a, b), adet in sorted(beraber.items(), key=lambda x: -x[1])[:10]:
+            print("  %-30s + %-24s %5d kare" % (ad(a)[:30], ad(b)[:24], adet))
+
+    # --- klasor dagilimi
+    klasorler = {}
+    for yol, in con.execute("SELECT path FROM files WHERE n_faces > 0"):
+        klasorler[os.path.dirname(yol)] = klasorler.get(os.path.dirname(yol), 0) + 1
+    if len(klasorler) > 1:
+        print()
+        print("  KLASOR DAGILIMI")
+        print("  " + "-" * 66)
+        for k, adet in sorted(klasorler.items(), key=lambda x: -x[1])[:10]:
+            print("  %-58s %5d" % (("..." + k[-55:]) if len(k) > 58 else k, adet))
+
+
+def cmd_ara(args):
+    """Belirli kisilerin (hepsinin birden) gorundugu kareleri listeler."""
+    con = db_connect(args.db)
+    isimler = isim_csv_oku(args.names or "isimler.csv")
+    ters = {}
+    for cid, adi in isimler.items():
+        if adi:
+            ters.setdefault(adi.lower(), []).append(cid)
+
+    aranan = []
+    for t in args.kisi:
+        t = str(t).strip()
+        if t.isdigit():
+            aranan.append(int(t))
+            continue
+        bulundu = []
+        for adi, kumeler in ters.items():
+            if t.lower() in adi:
+                bulundu.extend(kumeler)
+        if not bulundu:
+            print("Bulunamadi: %s" % t)
+            return
+        aranan.extend(bulundu)
+
+    kare_kisi = {}
+    for cid, yol in con.execute(
+            "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+        kare_kisi.setdefault(yol, set()).add(cid)
+
+    istenen = set(aranan)
+    if args.herhangi:
+        sonuc = [y for y, k in kare_kisi.items() if k & istenen]
+        kural = "herhangi biri"
+    else:
+        sonuc = [y for y, k in kare_kisi.items() if istenen <= k]
+        kural = "hepsi birden"
+    sonuc.sort()
+
+    adlar = [isimler.get(c) or ("kisi_%04d" % c) for c in sorted(istenen)]
+    print()
+    print("Aranan (%s): %s" % (kural, ", ".join(adlar)))
+    print("Bulunan kare : %d" % len(sonuc))
+    print("-" * 66)
+    for y in sonuc[:args.limit or 40]:
+        print("  " + y)
+    if len(sonuc) > (args.limit or 40):
+        print("  ... ve %d kare daha" % (len(sonuc) - (args.limit or 40)))
+    if args.dosyaya:
+        Path(args.dosyaya).write_text("\n".join(sonuc), encoding="utf-8")
+        print()
+        print("Liste yazildi: %s" % args.dosyaya)
+        print("(Bu dosyayi 'teslim' ya da 'onay' komutuna verebilirsiniz.)")
+
+
 def cmd_teslim(args):
     """Secilen kareleri kucultup filigranlayarak teslim paketine cevirir."""
     import teslim as tp
@@ -1819,6 +1960,8 @@ def main():
     ks = sub.add_parser("kisiler", help="kutuphanedeki kisileri listele / sil")
     ks.add_argument("--kutuphane", default=None)
     ks.add_argument("--sil", default="", help="silinecek kisinin tam ismi")
+    ks.add_argument("--disa-aktar", default="", help="kutuphaneyi dosyaya yedekle")
+    ks.add_argument("--ice-aktar", default="", help="yedegi geri yukle / birlestir")
     ks.set_defaults(func=cmd_kisiler)
 
     m = sub.add_parser("etiketle", help="isimleri fotograf metadata'sina yaz (kopya olusturmaz)")
@@ -1841,6 +1984,23 @@ def main():
         m.add_argument("--" + _alan, default="", help=_yardim + " (kunye icin)")
     m.add_argument("--evet", action="store_true", help="onay sormadan yaz")
     m.set_defaults(func=cmd_etiketle)
+
+    rp = sub.add_parser("rapor", help="kimler var, kim kiminle, hangi klasorde kac kare")
+    rp.add_argument("--db", default="faces.db")
+    rp.add_argument("--names", default="isimler.csv")
+    rp.add_argument("--limit", type=int, default=0)
+    rp.set_defaults(func=cmd_rapor)
+
+    ar = sub.add_parser("ara", help="belirli kisilerin gorundugu kareleri bul")
+    ar.add_argument("--db", default="faces.db")
+    ar.add_argument("--names", default="isimler.csv")
+    ar.add_argument("--kisi", nargs="+", required=True,
+                    help="isim parcasi ya da kume numarasi (or: Ahmet Ayse)")
+    ar.add_argument("--herhangi", action="store_true",
+                    help="hepsi yerine herhangi biri yeterli olsun")
+    ar.add_argument("--limit", type=int, default=0)
+    ar.add_argument("--dosyaya", default="", help="sonucu bu dosyaya yaz")
+    ar.set_defaults(func=cmd_ara)
 
     tl = sub.add_parser("teslim", help="kucultulmus + filigranli teslim paketi ve kontak baskisi")
     tl.add_argument("--db", default="faces.db")

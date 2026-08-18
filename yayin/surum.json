@@ -1,21 +1,21 @@
 {
-  "surum": "1.13.0",
-  "notlar": "Hizli tarama secenegi (dedektor 512, %36 hizli); coklu surec olculdu ve varsayilan disi birakildi",
+  "surum": "1.14.0",
+  "notlar": "Rapor ve arama, kutuphane yedekleme/tasima, macOS baslaticisi",
   "dosyalar": [
     {
       "ad": "kur.py",
       "url": "kur.py",
-      "sha256": "154770737eabacb4cff45022492ad5808f19ba0465e58cbc8c204b3f363b670f"
+      "sha256": "30fa57ece470209be888569faaa573a61e18d336b3a7e1db65cf7b69bc9ec184"
     },
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "e8b50adbb4021af4006dc18bf6b3131259779bbc97a4569acc758cde2fe559c4"
+      "sha256": "97ce677e56fd65c08128fc06101a8b22ab63d0c3d4bc002fed1d135f9bb29f7e"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "5831f83f7184ab116586f60c70c8ed915b4ff0de92a7aff1fb9543ee9e4431bb"
+      "sha256": "f57f947b26c288e8ea85c623d1dd17f7af8ebdce14106280aad28f8c393b73fe"
     },
     {
       "ad": "arayuz.html",
@@ -25,17 +25,17 @@
     {
       "ad": "kutuphane.py",
       "url": "kutuphane.py",
-      "sha256": "7e2e1bc6b763b4fee8651835952a7096729f746702bbf28ccde348197926e21a"
+      "sha256": "0c8f0f2cc65ce9c2dd484cb2a6e81691b857d1f1d3bf124e28a5c3e5b94f7792"
     },
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "5052351d5541fc3663e48b80d43cc8b3d43ebce4ae9c344d8dd61fc9145159c2"
+      "sha256": "c81e1b327c2e1c9a689a8dd6291c9642dd4bb6f44453cc2d00db9036fb8c4377"
     },
     {
       "ad": "teslim.py",
       "url": "teslim.py",
-      "sha256": "ff79e9d4449c5f4e8e9fa5802d489ce86e8f23aa6d57a84d935d99b651577aba"
+      "sha256": "f676b90755b70dd7a5e817a13f06154329d6562417a97069745c2807a9456778"
     },
     {
       "ad": "baslat.py",

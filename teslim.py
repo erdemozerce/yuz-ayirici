@@ -110,10 +110,16 @@ def kontak_baskisi(dosyalar, hedef_pdf, sutun=4, satir=5, kenar=90, baslik=""):
     SAYFA = (2480, 3508)                 # A4 @300dpi
     hucre_g = (SAYFA[0] - kenar * (sutun + 1)) // sutun
     hucre_y = (SAYFA[1] - kenar * (satir + 1) - 120) // satir
-    try:
-        yazi = ImageFont.truetype("arial.ttf", 26)
-        baslik_yazi = ImageFont.truetype("arialbd.ttf", 44)
-    except Exception:
+    yazi = baslik_yazi = None
+    for ad in ("arial.ttf", "Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
+               "/Library/Fonts/Arial.ttf", "DejaVuSans.ttf"):
+        try:
+            yazi = ImageFont.truetype(ad, 26)
+            baslik_yazi = ImageFont.truetype(ad, 44)
+            break
+        except Exception:
+            continue
+    if yazi is None:
         yazi = baslik_yazi = ImageFont.load_default()
 
     sayfalar = []

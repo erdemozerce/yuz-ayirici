@@ -521,7 +521,12 @@ class Vekil(BaseHTTPRequestHandler):
             hedef = cfg.get("hedef_klasor")
             if hedef and Path(hedef).exists():
                 try:
-                    os.startfile(hedef)
+                    if os.name == "nt":
+                        os.startfile(hedef)
+                    elif sys.platform == "darwin":
+                        subprocess.call(["open", hedef])
+                    else:
+                        subprocess.call(["xdg-open", hedef])
                 except Exception:
                     pass
             return self._json({"ok": True})

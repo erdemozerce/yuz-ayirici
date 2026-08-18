@@ -53,11 +53,37 @@ def nvidia_var_mi():
     return calistir(["nvidia-smi"], sessiz=True)
 
 
+def mac_baslatici():
+    """macOS icin cift tiklanabilir .command dosyasi + Masaustune kisayol."""
+    try:
+        betik = BASE / "BASLAT.command"
+        betik.write_text(
+            "#!/bin/bash\n"
+            'cd "$(dirname "$0")"\n'
+            '"%s" arayuz.py\n' % sys.executable,
+            encoding="utf-8")
+        os.chmod(betik, 0o755)
+        masaustu = Path(os.path.expanduser("~/Desktop"))
+        if masaustu.is_dir():
+            bag = masaustu / "Yuz Ayirici.command"
+            try:
+                if bag.exists() or bag.is_symlink():
+                    bag.unlink()
+                os.symlink(betik, bag)
+            except OSError:
+                pass
+        return betik
+    except Exception:
+        return None
+
+
 def kisayol_olustur():
     """
     Masaustune kisayol koyar. Hedef: python.exe (IMZALI) + arayuz.py
     .bat kullanilmaz, boylece Akilli Uygulama Denetimi engellemez.
     """
+    if os.name != "nt":
+        return mac_baslatici()
     try:
         masaustu = Path(os.path.expanduser("~")) / "Desktop"
         if not masaustu.exists():
@@ -106,7 +132,13 @@ def main():
         return 1
 
     baslik("3/4  Ekran karti")
-    if nvidia_var_mi():
+    if os.name != "nt" and sys.platform == "darwin":
+        print("  macOS - islemci modunda calisacak")
+        try:
+            (BASE / "gpu_var.txt").unlink()
+        except OSError:
+            pass
+    elif nvidia_var_mi():
         print("  NVIDIA bulundu - hizlandirilmis surum kuruluyor...")
         calistir([sys.executable, "-m", "pip", "uninstall", "-y", "onnxruntime",
                   "--quiet"], sessiz=True)
@@ -132,9 +164,13 @@ def main():
 
     lnk = kisayol_olustur()
     baslik("KURULUM TAMAM")
-    if lnk:
+    if lnk and os.name == "nt":
         print("  Masaustunde 'Yuz Ayirici' kisayolu olusturuldu.")
         print("  Programi acmak icin ona cift tiklayin.")
+    elif lnk:
+        print("  Masaustunde 'Yuz Ayirici.command' olusturuldu.")
+        print("  Programi acmak icin ona cift tiklayin.")
+        print("  (Ilk acilista macOS izin sorabilir: Sag tik > Ac > Ac)")
     else:
         print("  Kisayol olusturulamadi. Programi su komutla acabilirsiniz:")
         print('     py -3 "%s"' % (BASE / "arayuz.py"))
