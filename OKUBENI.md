@@ -98,21 +98,30 @@ Dosya sistemi adı bilgi amaçlı ayrıca okunur (Windows'ta `GetVolumeInformati
 Yazmadan önce özet ekranı + onay gelir; `--evet` ile otomasyonda atlanır, `--dry-run` hiç yazmaz.
 Disk alanı yetmiyorsa işlem hiç başlamaz.
 
-## İsim önerme (v1.2.0)
+## İsim önerme (v1.3.0) — neden Google değil, AWS
 
-`tanima.py` + `face_sorter.py isimlendir` / `onayla`. Google Cloud Vision WEB_DETECTION,
-düz REST + API anahtarı (servis hesabı JSON'u ve ek kütüphane gerekmez).
+**Google Vision `web detection` denendi ve elendi.** Gerçek fotoğraflarla test edildi:
+o yöntem gönderdiğin **görseli** internette arar, **yüzü** tanımaz. Kardeşinin
+yayınlanmamış kareleri için dönen sonuç: `bestGuessLabels: ['human']`,
+tam eşleşen görsel 0, eşleşen sayfa 0. Dar/geniş kırpma fark etmedi.
+Google'ın ayrı **Celebrity Recognition** özelliği ise 16 Eylül 2025'te kaldırıldı.
+
+**AWS Rekognition `RecognizeCelebrities`** kullanılıyor: yüzü bir kişi veritabanıyla
+karşılaştırır, fotoğrafın daha önce yayınlanmış olması gerekmez.
 
 Tasarım kararları:
-- **Kişi başına 3 kare**, tüm arşiv değil — 50 kişi ≈ 150 sorgu (aylık 1000 ücretsiz sınırın altında).
-- **Oy birliği aranır**: bir isim kabul edilmek için en az 2 karede çıkmalı ve puanı eşiği geçmeli.
-  Tek karede çıkan isim reddedilir — ters görsel arama tek karede kolayca yanılır.
-- **Genel terim filtresi**: "facial expression", "Getty Images", "portrait" gibi ~60 terim elenir;
-  isim adayı 2-4 kelime olmalı ve her kelimesi büyük harfle başlamalı (Türkçe karakterler dahil).
+- **Kişi başına 3 kare**, tüm arşiv değil — 50 kişi ≈ 150 sorgu ≈ $0.15.
+- **Oy birliği**: bir isim için en az 2 karede aynı kişi + `MatchConfidence ≥ %85`.
+  Tek karede çıkan ya da kareler arası çelişen eşleşmeler reddedilir.
 - **Öneri ≠ isim**: `isimler.csv` içinde `onerilen_isim` ve `isim` ayrı sütunlar.
-  `export` sadece `isim` sütununu okur. Onaylanmadan hiçbir klasör isimlenmez.
-- Anahtar `google_anahtar.txt` ya da `GOOGLE_API_KEY` ortam değişkeninden okunur,
-  `.gitignore`'dadır, hata mesajlarında asla yazdırılmaz.
+  `export` sadece `isim` sütununu okur. Onaysız hiçbir klasör isimlenmez.
+- IMDb bağlantısı da saklanır (`oneriler.sayfalar`) — şüpheli öneriyi doğrulamak için.
+- Kimlik: env → `~/.aws/credentials` → `aws_anahtar.json` (gitignore'da).
+  IAM kullanıcısına `AmazonRekognitionReadOnlyAccess` yeterli.
 
-Test edildi: isim/genel-terim ayrımı, puanlama, uçtan uca öneri akışı (ağa çıkmadan,
-sahte Google cevabıyla) — tutarlı isim kabul, tutarsız/boş olanlar reddedildi.
+Test edildi (ağa çıkmadan, taklit cevaplarla): tutarlı+yüksek güvenli öneri kabul,
+tutarsız / eşik altı / tanınmayan reddedildi, öneri otomatik isme dönüşmedi.
+Türkçe karakterli isimler konsola sorunsuz basıldı.
+
+**Henüz bilinmiyor:** AWS'in kişi veritabanının Türk dizi oyuncularını ne kadar
+kapsadığı. `isimlendir --limit 3` ile küçük bir denemeyle ölçülmeli.

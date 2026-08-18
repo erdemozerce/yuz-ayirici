@@ -80,25 +80,32 @@ Klasörler `0001_Ahmet`, `0002_Ayşe` şeklinde yeniden oluşur.
 
 ---
 
-## 3b. İsimleri internetten buldurmak (isteğe bağlı)
+## 3b. İsimleri otomatik buldurmak (isteğe bağlı)
 
-Fotoğraflarındaki kişiler tanınmış isimlerse, program onları internetten arayıp
-sana **isim önerebilir**. Menüden:
+Fotoğraflarındaki kişiler tanınmış isimlerse, program onları tanıyıp sana
+**isim önerebilir**. Menüden:
 
-- **10)** İsimleri internetten bul — her kişi için 3 kare Google'a sorulur
+- **10)** İsimleri internetten bul — her kişi için 3 kare AWS'e sorulur
 - **11)** Önerilen isimleri onayla — tek tek geçer, Enter'a basınca öneriyi kabul eder
+
+Bir ismin kabul edilmesi için **en az 2 karede aynı kişi** çıkması ve güvenin
+%85'i geçmesi gerekiyor. Tek karede çıkan ya da düşük güvenli eşleşmeler eleniyor.
 
 Öneriler asla doğrudan klasöre yazılmaz. Sen onaylamadan hiçbir klasör isimlenmez.
 
 **Kurulum (bir kere):**
-1. `console.cloud.google.com` → yeni proje
-2. "Cloud Vision API" servisini etkinleştir
-3. APIs & Services → Credentials → Create credentials → API key
-4. Anahtarı program klasöründeki `google_anahtar.txt` dosyasına yapıştır (tek satır)
+1. `console.aws.amazon.com` → IAM → Users → kullanıcı seç (yoksa oluştur)
+2. Security credentials → **Create access key**
+3. Kullanıcıya sadece **AmazonRekognitionReadOnlyAccess** yetkisi ver — başka yetki gerekmez
+4. Program klasöründe `aws_anahtar.json` dosyası oluştur, içine şunu yaz:
 
-Ayda ilk 1000 sorgu ücretsiz. 50 kişilik bir arşiv ≈ 150 sorgu, yani muhtemelen bedava.
+```json
+{"access_key": "AKIA...", "secret_key": "...", "bolge": "us-east-1"}
+```
 
-⚠️ **Bunu bilerek yap:** bu adımda kişi başına 3 yüz kırpması Google'a gönderilir.
+Maliyet görüntü başına ~$0.001. 50 kişilik bir arşiv ≈ 150 sorgu ≈ 15 sent.
+
+⚠️ **Bunu bilerek yap:** bu adımda kişi başına 3 yüz kırpması AWS'e gönderilir.
 Programın geri kalanı tamamen internetsiz çalışır, fotoğrafların hiçbir yere gitmez.
 Bu özelliği hiç kullanmazsan da program eksiksiz çalışır — isimleri elle de yazabilirsin.
 

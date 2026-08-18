@@ -1,16 +1,16 @@
 {
-  "surum": "1.2.0",
-  "notlar": "Internetten isim onerisi (Google Vision), Turkce karakter hatasi duzeltildi",
+  "surum": "1.3.0",
+  "notlar": "Isim onerisi AWS Rekognition'a gecti (Google web detection bu is icin calismiyordu)",
   "dosyalar": [
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "ca090a4315788956bd98313bbb96525997c9d18c6d2ceba4d661d2e25c9ce8fa"
+      "sha256": "ed9a04ceeff019f8d93ef293929565d7c0fd52d8dfd196e1441ebafdd5331400"
     },
     {
       "ad": "tanima.py",
       "url": "tanima.py",
-      "sha256": "f67288e1b8d4822d014e25a2d191456d92f03c0d1896cc6ccef6cea0495ade5a"
+      "sha256": "4d3c29d1eaba23ab0694b8ecb893e4ec29337b648ac5b33513adc334c90d695d"
     },
     {
       "ad": "baslat.py",
@@ -30,7 +30,7 @@
     {
       "ad": "gereksinimler.txt",
       "url": "gereksinimler.txt",
-      "sha256": "d309498a2b2458a7cfd38617de696a691aed2ed1e66d69eaa412bb4271dd7c58"
+      "sha256": "a97e3f37c323cb4553b2cd6d449d164e0f87385f20f9dcd793b46ab0465e1160"
     }
   ]
 }

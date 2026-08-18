@@ -1,146 +1,131 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-tanima.py — Google Cloud Vision "web detection" ile kisi ismi onerme.
+tanima.py — AWS Rekognition ile taninmis kisi tanima.
 
 ISTEGE BAGLI ozelliktir. Kullanilmadigi surece hicbir veri disari cikmaz.
-Kullanildiginda SADECE kisi basina birkac yuz kirpmasi Google'a gonderilir,
-tum arsiv degil.
+Kullanildiginda SADECE kisi basina birkac yuz kirpmasi AWS'e gonderilir,
+arsivin tamami degil.
 
-Anahtar nereden okunur (sirasiyla):
-  1. GOOGLE_API_KEY ortam degiskeni
-  2. program klasorundeki google_anahtar.txt dosyasi
+NEDEN AWS?
+  Google Vision "web detection" denendi ve bu is icin uygun olmadigi goruldu:
+  o yontem GORSELI internette arar, YUZU tanimaz. Yayinlanmamis kareler icin
+  hicbir sonuc dondurmuyor ("human", "girl" gibi genel etiketler).
+  AWS Rekognition RecognizeCelebrities ise yuzu bir kisi veritabaniyla
+  karsilastirir; fotografin daha once yayinlanmis olmasi gerekmez.
 
-Anahtar hicbir zaman kodun icine yazilmaz, GitHub'a gitmez (.gitignore'da).
+KIMLIK BILGISI NEREDEN OKUNUR (sirasiyla):
+  1. AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY ortam degiskenleri
+  2. ~/.aws/credentials  ('aws configure' ile olusur)
+  3. program klasorundeki aws_anahtar.json:
+        {"access_key": "...", "secret_key": "...", "bolge": "us-east-1"}
+
+Anahtarlar kodun icine yazilmaz, GitHub'a gitmez (.gitignore'da).
 """
 
-import base64
 import json
 import os
-import re
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
-API = "https://vision.googleapis.com/v1/images:annotate"
-ZAMAN_ASIMI = 40
-
-# Kisi ismi olmayan, sik donen genel terimler
-GENEL = {
-    "person", "people", "face", "facial expression", "portrait", "photograph", "photo",
-    "photo shoot", "portrait photography", "hair", "hairstyle", "eyebrow", "chin",
-    "forehead", "nose", "lip", "cheek", "smile", "beauty", "model", "fashion",
-    "fashion model", "actor", "actress", "celebrity", "human", "head", "eye",
-    "glasses", "eyewear", "t-shirt", "shirt", "jacket", "image", "stock photography",
-    "selfie", "black hair", "long hair", "facial hair", "beard", "moustache",
-    "public figure", "gesture", "event", "crowd", "audience", "news", "press",
-    "journalist", "photography", "portrait art", "screenshot", "video", "film",
-    "television", "movie", "series", "getty images", "shutterstock", "alamy",
-}
-
-# Bir ismin kelimesi olabilecek karakterler (Turkce dahil)
-KELIME = re.compile(r"^[A-ZÇĞİÖŞÜ][a-zçğıöşü'\.\-]{1,}$")
+VARSAYILAN_BOLGE = "us-east-1"
 
 
-def anahtar_bul(klasor=None):
-    """API anahtarini ortam degiskeninden ya da yerel dosyadan okur."""
-    for ad in ("GOOGLE_API_KEY", "GOOGLE_VISION_ANAHTARI"):
-        v = os.environ.get(ad, "").strip()
-        if v:
-            return v
+def _yerel_anahtar(klasor=None):
+    """aws_anahtar.json dosyasini okur (varsa)."""
     klasor = Path(klasor or Path(__file__).resolve().parent)
-    f = klasor / "google_anahtar.txt"
-    if f.exists():
-        v = f.read_text(encoding="utf-8").strip()
-        if v:
-            return v
-    return ""
+    f = klasor / "aws_anahtar.json"
+    if not f.exists():
+        return {}
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
 
 
 def anahtar_yardimi():
     return (
-        "Google Vision anahtari bulunamadi.\n"
-        "  1. console.cloud.google.com adresinden bir proje acin\n"
-        "  2. 'Cloud Vision API' servisini etkinlestirin\n"
-        "  3. APIs & Services > Credentials > Create credentials > API key\n"
-        "  4. Anahtari program klasorundeki 'google_anahtar.txt' dosyasina yapistirin\n"
-        "     (tek satir, baska bir sey yazmayin)\n"
-        "Anahtar bu dosyada kalir, GitHub'a gonderilmez."
+        "AWS kimlik bilgisi bulunamadi. Uc yoldan biriyle verebilirsiniz:\n"
+        "\n"
+        "  A) En kolayi - program klasorune 'aws_anahtar.json' dosyasi olusturun:\n"
+        '       {"access_key": "AKIA...", "secret_key": "...", "bolge": "us-east-1"}\n'
+        "\n"
+        "  B) AWS CLI kuruluysa:  aws configure\n"
+        "\n"
+        "  C) Ortam degiskeni:    setx AWS_ACCESS_KEY_ID \"AKIA...\"\n"
+        "                         setx AWS_SECRET_ACCESS_KEY \"...\"\n"
+        "\n"
+        "Anahtari nereden alirsiniz:\n"
+        "  console.aws.amazon.com > IAM > Users > (kullanici) > Security credentials\n"
+        "  > Create access key.  Kullaniciya 'AmazonRekognitionReadOnlyAccess'\n"
+        "  yetkisi yeterlidir - baska hicbir yetki gerekmez."
     )
 
 
-def isim_gibi_mi(metin):
-    """'Kivanc Tatlitug' evet; 'facial expression' hayir."""
-    metin = (metin or "").strip()
-    if not metin or metin.lower() in GENEL:
-        return False
-    if len(metin) < 5 or len(metin) > 48:
-        return False
-    kelimeler = metin.split()
-    if not (2 <= len(kelimeler) <= 4):
-        return False
-    if any(k.lower() in GENEL for k in kelimeler):
-        return False
-    return all(KELIME.match(k) for k in kelimeler)
-
-
-def web_tespiti(jpeg_baytlari, anahtar, maks=12):
-    """Google Vision WEB_DETECTION cagrisi. webDetection sozlugunu dondurur."""
-    govde = {
-        "requests": [{
-            "image": {"content": base64.b64encode(jpeg_baytlari).decode("ascii")},
-            "features": [{"type": "WEB_DETECTION", "maxResults": maks}],
-        }]
-    }
-    url = API + "?key=" + urllib.parse.quote(anahtar, safe="")
-    istek = urllib.request.Request(
-        url, data=json.dumps(govde).encode("utf-8"),
-        headers={"Content-Type": "application/json", "User-Agent": "yuz-ayirici"},
-    )
+def hazirla(bolge=None, klasor=None):
+    """Rekognition istemcisi dondurur. Kimlik yoksa RuntimeError firlatir."""
     try:
-        with urllib.request.urlopen(istek, timeout=ZAMAN_ASIMI) as r:
-            cevap = json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        try:
-            detay = json.loads(e.read().decode("utf-8"))
-            mesaj = detay.get("error", {}).get("message", "")
-        except Exception:
-            mesaj = ""
-        # Anahtar hicbir zaman ekrana basilmaz
-        raise RuntimeError("Google Vision hatasi (%s): %s" % (e.code, mesaj or "detay yok"))
-    yanit = (cevap.get("responses") or [{}])[0]
-    if "error" in yanit:
-        raise RuntimeError("Google Vision hatasi: %s" % yanit["error"].get("message", ""))
-    return yanit.get("webDetection", {}) or {}
+        import boto3
+        from botocore.exceptions import NoCredentialsError  # noqa: F401
+    except ImportError:
+        raise RuntimeError(
+            "'boto3' kutuphanesi kurulu degil. Su komutu calistirin:\n"
+            "    pip install boto3"
+        )
+
+    yerel = _yerel_anahtar(klasor)
+    bolge = bolge or yerel.get("bolge") or os.environ.get("AWS_DEFAULT_REGION") or VARSAYILAN_BOLGE
+
+    if yerel.get("access_key") and yerel.get("secret_key"):
+        istemci = boto3.client(
+            "rekognition",
+            region_name=bolge,
+            aws_access_key_id=yerel["access_key"],
+            aws_secret_access_key=yerel["secret_key"],
+        )
+    else:
+        istemci = boto3.client("rekognition", region_name=bolge)
+
+    # kimlik gercekten var mi, hemen anlasilsin (bos istek atmadan)
+    kimlik = istemci._request_signer._credentials
+    if kimlik is None:
+        raise RuntimeError(anahtar_yardimi())
+    return istemci
 
 
-def adaylari_puanla(wd):
-    """webDetection sonucundan {isim: puan} cikarir."""
-    puanlar = {}
+def sorgula(istemci, jpeg_baytlari):
+    """
+    Bir yuz kirpmasi icin taninan kisileri dondurur:
+        [(isim, guven_yuzde, [baglantilar]), ...]  - en iyi eslesme basta
+    """
+    from botocore.exceptions import BotoCoreError, ClientError
 
-    def ekle(ad, p):
-        ad = ad.strip()
-        if isim_gibi_mi(ad):
-            puanlar[ad] = puanlar.get(ad, 0.0) + p
+    try:
+        cevap = istemci.recognize_celebrities(Image={"Bytes": jpeg_baytlari})
+    except ClientError as e:
+        kod = e.response.get("Error", {}).get("Code", "")
+        mesaj = e.response.get("Error", {}).get("Message", "")
+        if kod in ("UnrecognizedClientException", "InvalidSignatureException",
+                   "AccessDeniedException", "AuthFailure"):
+            raise RuntimeError("AWS kimlik/yetki hatasi (%s): %s" % (kod, mesaj))
+        raise RuntimeError("AWS hatasi (%s): %s" % (kod, mesaj))
+    except BotoCoreError as e:
+        raise RuntimeError("AWS baglanti hatasi: %s" % e)
 
-    # 'best guess' Google'in kendi tahmini - en guclu sinyal
-    for bg in wd.get("bestGuessLabels", []) or []:
-        ekle(str(bg.get("label", "")).title() if str(bg.get("label", "")).islower()
-             else str(bg.get("label", "")), 3.0)
+    sonuc = []
+    for k in cevap.get("CelebrityFaces", []) or []:
+        kutu = (k.get("Face") or {}).get("BoundingBox") or {}
+        alan = float(kutu.get("Width", 0)) * float(kutu.get("Height", 0))
+        sonuc.append((
+            (k.get("Name") or "").strip(),
+            float(k.get("MatchConfidence") or 0.0),
+            list(k.get("Urls") or []),
+            alan,
+        ))
+    # kirpmanin ortasindaki (en buyuk) yuz once gelsin
+    sonuc.sort(key=lambda t: -t[3])
+    return [(a, g, u) for a, g, u, _ in sonuc]
 
-    # web varliklari - skorlariyla birlikte
-    for e in wd.get("webEntities", []) or []:
-        ekle(str(e.get("description", "")), min(float(e.get("score") or 0.0), 2.0))
 
-    return puanlar
-
-
-def sayfa_ornekleri(wd, adet=3):
-    """Onerinin nereden geldigini gosteren ornek sayfa basliklari."""
-    out = []
-    for s in (wd.get("pagesWithMatchingImages") or [])[:adet]:
-        baslik = (s.get("pageTitle") or "").strip()
-        if baslik:
-            out.append(re.sub(r"<[^>]+>", "", baslik)[:90])
-    return out
+def taninmayan_sayisi(istemci_cevabi):
+    return len(istemci_cevabi.get("UnrecognizedFaces", []) or [])

@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import argparse
 import base64
@@ -366,9 +366,10 @@ def cmd_identify(args):
     import tanima
 
     con = db_connect(args.db)
-    anahtar = tanima.anahtar_bul(Path(__file__).resolve().parent)
-    if not anahtar:
-        print(tanima.anahtar_yardimi())
+    try:
+        istemci = tanima.hazirla(args.bolge)
+    except RuntimeError as e:
+        print(e)
         return
 
     kumeler = [
@@ -378,31 +379,33 @@ def cmd_identify(args):
         if nfoto >= args.min_photos
     ]
     if not args.yeniden:
-        var = {r[0] for r in con.execute("SELECT cluster FROM oneriler WHERE onerilen IS NOT NULL")}
+        var = {r[0] for r in con.execute("SELECT cluster FROM oneriler")}
         kumeler = [k for k in kumeler if k[0] not in var]
     if args.limit:
         kumeler = kumeler[: args.limit]
     if not kumeler:
-        print("Sorgulanacak yeni kume yok. (--yeniden ile hepsini tekrar sorgulayabilirsiniz)")
+        print("Sorgulanacak yeni kume yok. (--yeniden ile hepsini tekrar sorabilirsiniz)")
         return
 
     sorgu = len(kumeler) * args.samples
     print()
     print("=" * 64)
-    print("  INTERNETTEN ISIM ONERISI  -  Google Cloud Vision")
+    print("  INTERNETTEN ISIM ONERISI  -  AWS Rekognition")
     print("=" * 64)
     print("  Sorgulanacak kisi : %d" % len(kumeler))
     print("  Kisi basina kare  : %d" % args.samples)
     print("  Toplam sorgu      : %d" % sorgu)
-    print("  Tahmini maliyet   : ~$%.2f  (aylik ilk 1000 sorgu ucretsiz)" % (sorgu * 0.0035))
+    print("  Tahmini maliyet   : ~$%.2f  (goruntu basina ~$0.001)" % (sorgu * 0.001))
+    print("  Guven esigi       : %%%.0f" % args.esik)
     print("-" * 64)
-    print("  DIKKAT: bu adimda kisi basina %d yuz kirpmasi Google'a GONDERILIR." % args.samples)
+    print("  DIKKAT: bu adimda kisi basina %d yuz kirpmasi AWS'e GONDERILIR." % args.samples)
     print("  Diger tum adimlar internetsiz calisir. Arsivin tamami gonderilmez.")
     print("  Gelen isimler sadece ONERIDIR; siz onaylamadan klasor isimlenmez.")
     print("=" * 64)
     if not args.evet:
         try:
-            c = input("\n  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
+            print()
+            c = input("  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
         except EOFError:
             c = "h"
         if c not in ("", "e", "evet", "y", "yes"):
@@ -413,60 +416,65 @@ def cmd_identify(args):
     bulunan = hata = 0
     for sira, (cid, nfoto) in enumerate(kumeler, 1):
         ornekler = kume_ornekleri(con, cid, args.samples)
-        puanlar, gorulme, sayfalar, kullanilan = {}, {}, [], 0
+        oylar, kullanilan = {}, 0
         for kayit in ornekler:
             jpeg = yuz_kirp_jpeg(kayit)
             if jpeg is None:
                 continue
             try:
-                wd = tanima.web_tespiti(jpeg, anahtar)
+                eslesmeler = tanima.sorgula(istemci, jpeg)
             except RuntimeError as e:
                 print("  !! %s" % e)
                 hata += 1
                 if hata >= 3 and bulunan == 0:
-                    print("  Ust uste hata alindi, duruldu. Anahtari/API ayarini kontrol edin.")
+                    print("  Ust uste hata alindi, duruldu. Kimlik/yetki ayarini kontrol edin.")
                     return
                 continue
             kullanilan += 1
-            for ad, p in tanima.adaylari_puanla(wd).items():
-                puanlar[ad] = puanlar.get(ad, 0.0) + p
-                gorulme[ad] = gorulme.get(ad, 0) + 1
-            sayfalar.extend(tanima.sayfa_ornekleri(wd, 2))
+            if not eslesmeler:
+                continue
+            isim, guven, baglantilar = eslesmeler[0]
+            if not isim or guven < args.esik:
+                continue
+            kayitlar = oylar.setdefault(isim, [0, 0.0, baglantilar])
+            kayitlar[0] += 1
+            kayitlar[1] += guven
 
-        en_iyi, puan = "", 0.0
-        if puanlar:
-            en_iyi = max(puanlar, key=lambda a: (gorulme[a], puanlar[a]))
-            puan = puanlar[en_iyi]
-        yeterli = (
-            en_iyi
-            and puan >= args.esik
-            and (gorulme.get(en_iyi, 0) >= 2 or kullanilan <= 1)
-        )
+        en_iyi, oy, ort_guven, baglantilar = "", 0, 0.0, []
+        if oylar:
+            en_iyi = max(oylar, key=lambda a: (oylar[a][0], oylar[a][1]))
+            oy = oylar[en_iyi][0]
+            ort_guven = oylar[en_iyi][1] / max(oy, 1)
+            baglantilar = oylar[en_iyi][2]
+
+        yeterli = bool(en_iyi) and (oy >= 2 or kullanilan <= 1)
         if yeterli:
             bulunan += 1
             con.execute(
                 "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
                 "VALUES(?,?,?,?,?,?)",
-                (cid, en_iyi, puan, gorulme.get(en_iyi, 0), kullanilan, " | ".join(sayfalar[:3])),
+                (cid, en_iyi, ort_guven, oy, kullanilan, " | ".join(baglantilar[:2])),
             )
-            print("  [%d/%d] kisi_%04d (%d foto) -> %s  (%d/%d karede, puan %.1f)"
-                  % (sira, len(kumeler), cid, nfoto, en_iyi,
-                     gorulme.get(en_iyi, 0), kullanilan, puan))
+            print("  [%d/%d] kisi_%04d (%d foto) -> %s  (%d/%d karede, %%%.0f guven)"
+                  % (sira, len(kumeler), cid, nfoto, en_iyi, oy, kullanilan, ort_guven))
         else:
             con.execute(
                 "INSERT OR REPLACE INTO oneriler(cluster,onerilen,puan,ornek,toplam,sayfalar) "
                 "VALUES(?,?,?,?,?,?)",
-                (cid, None, puan, 0, kullanilan, " | ".join(sayfalar[:3])),
+                (cid, None, ort_guven, oy, kullanilan, ""),
             )
-            print("  [%d/%d] kisi_%04d (%d foto) -> isim bulunamadi"
-                  % (sira, len(kumeler), cid, nfoto))
+            not_ = "taninmadi" if not en_iyi else "tutarsiz (%d/%d karede)" % (oy, kullanilan)
+            print("  [%d/%d] kisi_%04d (%d foto) -> %s"
+                  % (sira, len(kumeler), cid, nfoto, not_))
         con.commit()
 
     yol = args.names or "isimler.csv"
     isim_csv_yaz(con, yol)
     print()
-    print("%d kisi icin isim onerildi. Oneriler %s dosyasina yazildi." % (bulunan, yol))
-    print("Onaylamak icin: python face_sorter.py onayla --db %s" % args.db)
+    print("%d kisi icin isim onerildi (%d kisi sorgulandi). Oneriler: %s"
+          % (bulunan, len(kumeler), yol))
+    if bulunan:
+        print("Onaylamak icin menuden 11, ya da: python face_sorter.py onayla --db %s" % args.db)
 
 
 # --------------------------------------------------------------------------
@@ -845,12 +853,14 @@ def main():
     r.add_argument("--overwrite-names", action="store_true")
     r.set_defaults(func=cmd_review)
 
-    i = sub.add_parser("isimlendir", help="internetten isim onerisi al (Google Vision)")
+    i = sub.add_parser("isimlendir", help="internetten isim onerisi al (AWS Rekognition)")
     i.add_argument("--db", default="faces.db")
     i.add_argument("--names", default="isimler.csv")
     i.add_argument("--samples", type=int, default=3, help="kisi basina sorgulanacak kare")
     i.add_argument("--min-photos", type=int, default=3, help="bu kadar fotografta gorunmeyeni sorma")
-    i.add_argument("--esik", type=float, default=2.5, help="oneri kabul esigi")
+    i.add_argument("--esik", type=float, default=85.0,
+                   help="eslesme guven esigi, yuzde (varsayilan 85)")
+    i.add_argument("--bolge", default="us-east-1", help="AWS bolgesi")
     i.add_argument("--limit", type=int, default=0, help="sadece ilk N kisiyi sorgula (deneme)")
     i.add_argument("--yeniden", action="store_true", help="daha once sorulanlari tekrar sor")
     i.add_argument("--evet", action="store_true", help="onay sormadan basla")
