@@ -1,6 +1,6 @@
 {
-  "surum": "1.16.0",
-  "notlar": "Kenar menu: Calisma / Kisi kutuphanesi / Rapor sayfalari; kutuphaneye kapak resmi, yeniden adlandirma, birlestirme, yedekleme",
+  "surum": "1.17.0",
+  "notlar": "Windows'un cirkin uyari kutulari kaldirildi: tum onay/soru/sonuc pencereleri artik programin kendi tasariminda, ekranin ortasinda",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "55e5416b039404135488b8d27778c55be795914ad3388a8aa213131349d59077"
+      "sha256": "cd3abbd33cdd0307ce536a3d6d134c842cda208b23591a313931f1341a4b7881"
     },
     {
       "ad": "arayuz.py",
@@ -25,7 +25,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "20db60c2dedc0cd49b46e79da14d0e453dfe8ffb24d5d104a1dfbf238ec9bc97"
+      "sha256": "ae6eda35c75c357f7bba0f91ad7154bf351dcbf1a9e584541910a206ec8f151b"
     },
     {
       "ad": "kutuphane.py",

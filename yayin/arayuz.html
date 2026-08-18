@@ -157,6 +157,41 @@
     margin-bottom:14px}
   label{cursor:pointer}
 
+  /* ---- program penceresi (alert/confirm/prompt yerine) ---- */
+  .ortu{position:fixed;inset:0;background:rgba(6,8,12,.62);z-index:100;
+    display:grid;place-items:center;padding:26px;backdrop-filter:blur(4px);
+    animation:belir .14s ease-out}
+  @keyframes belir{from{opacity:0}to{opacity:1}}
+  @keyframes yuksel{from{opacity:0;transform:translateY(10px) scale(.98)}
+                    to{opacity:1;transform:none}}
+  .ortu .pencere{background:var(--yuzey);border:1px solid var(--cizgi);
+    border-radius:18px;max-width:560px;width:100%;max-height:82vh;
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 24px 70px rgba(0,0,0,.5);animation:yuksel .18s cubic-bezier(.2,.8,.2,1)}
+  .ortu .pencere.genis{max-width:760px}
+  .ortu .ust{padding:22px 24px 0;display:flex;align-items:flex-start;gap:13px}
+  .ortu .im{width:38px;height:38px;border-radius:12px;flex:none;
+    display:grid;place-items:center;font-size:18px;
+    background:rgba(91,140,255,.14);color:var(--vurgu)}
+  .ortu.basarili .im{background:rgba(55,211,153,.15);color:var(--yesil)}
+  .ortu.hata .im{background:rgba(242,85,90,.15);color:var(--kirmizi)}
+  .ortu.uyari .im{background:rgba(245,185,66,.15);color:var(--sari)}
+  .ortu h3{margin:0;font-size:16.5px;font-weight:640;letter-spacing:-.2px;padding-top:6px}
+  .ortu .govde2{padding:14px 24px 4px;color:var(--soluk);font-size:13.5px;
+    line-height:1.65;overflow:auto}
+  .ortu .govde2 b,.ortu .govde2 strong{color:var(--yazi)}
+  .ortu .yol{display:block;margin:10px 0;padding:10px 12px;border-radius:10px;
+    background:var(--yuzey2);border:1px solid var(--cizgi);color:var(--yazi);
+    font:12px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
+    word-break:break-all}
+  .ortu pre.cikti{margin:10px 0 0;padding:12px 14px;border-radius:10px;
+    background:var(--bg);border:1px solid var(--cizgi);max-height:44vh;overflow:auto;
+    font:11.5px/1.7 ui-monospace,"Cascadia Mono",Consolas,monospace;
+    color:var(--soluk);white-space:pre-wrap;word-break:break-word}
+  .ortu input{width:100%;margin-top:12px;font-size:14px}
+  .ortu .altlik{padding:18px 24px 20px;display:flex;gap:9px;justify-content:flex-end;
+    flex-wrap:wrap}
+
   /* ---- kenar menu ---- */
   .govde{display:flex;align-items:flex-start;max-width:1180px;margin:0 auto;gap:0}
   .yanmenu{position:sticky;top:69px;flex:none;width:210px;padding:24px 14px 24px 26px}
@@ -459,6 +494,17 @@
   </div>
 </section>
 
+  <div id="ileti" class="ortu gizli">
+    <div class="pencere" id="ileti-pencere">
+      <div class="ust">
+        <div class="im" id="ileti-im">?</div>
+        <h3 id="ileti-baslik"></h3>
+      </div>
+      <div class="govde2" id="ileti-govde"></div>
+      <div class="altlik" id="ileti-altlik"></div>
+    </div>
+  </div>
+
   <datalist id="bilinen-isimler"></datalist>
 </div>
 </div>
@@ -517,10 +563,13 @@ async function etiketOnayla(){
   const d = await al("/api/durum");
   if(!d.ozet.isimli) return uyar("Önce en az bir kişiye isim verin.");
   const gomulu = $("#etiket-mod").value === "gomulu";
-  if(confirm(gomulu
-      ? "İsimler fotoğrafların İÇİNE yazılacak.\n\nGörüntü değişmez, mevcut etiketler korunur.\nÖnce 20 fotoğrafta denediniz mi?\n\nDevam edilsin mi?"
-      : "İsimler yan .xmp dosyalarına yazılacak.\nOrijinal fotoğraflara hiç dokunulmaz.\n\nDevam edilsin mi?"))
-    baslat("etiketle");
+  const govde = gomulu
+    ? "İsimler fotoğrafların <b>içine</b> yazılacak.<br><br>" +
+      "Görüntü değişmez, yıldız ve mevcut etiketler korunur. " +
+      "Önce 20 fotoğrafta denediniz mi?"
+    : "İsimler yan <b>.xmp</b> dosyalarına yazılacak.<br><br>" +
+      "Orijinal fotoğraflara hiç dokunulmaz.";
+  if (await onay("İsimleri yaz", govde, "Yaz")) baslat("etiketle");
 }
 
 async function hepsiniYap(){
@@ -541,9 +590,10 @@ let sirayla = [];
 async function klasorleOnayla(){
   const d = await al("/api/durum");
   if(!d.ayar.hedef_klasor) return uyar("Önce çıktı klasörünü seçin.");
-  if(confirm("Kişi klasörleri şuraya oluşturulacak:\n\n" + d.ayar.hedef_klasor +
-             "\n\nOrijinal fotoğraflarınıza dokunulmaz. Devam edilsin mi?"))
-    baslat("klasorle");
+  const g = "Kişi klasörleri şuraya oluşturulacak:" +
+            '<span class="yol">' + d.ayar.hedef_klasor + "</span>" +
+            "Orijinal fotoğraflarınıza dokunulmaz.";
+  if (await onay("Klasörleri oluştur", g, "Oluştur")) baslat("klasorle");
 }
 
 async function durumGuncelle(){
@@ -619,6 +669,11 @@ async function durumGuncelle(){
     } else {
       kisileriYukle();
       if(!d.hata) uyar("");
+      // Kisa islemlerde cikti sayfanin yukarisindaki gunluk kutusuna dusuyordu;
+      // kullanici asagida oldugu icin "calismadi" saniyordu. Artik ortada gosteriliyor.
+      const ek = (d.bitti === "Onizleme")
+        ? {yazi:"Klasörleri şimdi oluştur", islev:function(){ klasorleOnayla(); }} : null;
+      sonucGoster(d.bitti, d.satirlar || [], !!d.hata, ek);
     }
   }
 }
@@ -629,11 +684,95 @@ async function guncellemeKontrol(){
   durumGuncelle();
 }
 async function guncelle(){
-  if(!confirm("Yeni sürüm indirilip kurulacak.\n\nAyarların, isimlerin ve kişi " +
-              "kütüphanen korunur. Devam?")) return;
+  if (!await onay("Güncelle",
+        "Yeni sürüm indirilip kurulacak.<br><br>" +
+        "Ayarların, isimlerin ve kişi kütüphanen <b>korunur</b>.", "Güncelle")) return;
   const c = await post("/api/guncelle", {islem:"uygula"});
-  alert(c.mesaj || (c.ok ? "Güncellendi." : "Güncelleme yapılamadı."));
+  await bilgi("Güncelleme", c.mesaj || (c.ok ? "Güncellendi." : "Güncelleme yapılamadı."),
+              c.ok ? "basarili" : "hata");
   durumGuncelle();
+}
+
+/* ---- programin kendi ileti penceresi ---------------------------------
+   Tarayicinin alert/confirm/prompt kutulari "127.0.0.1:... says" yaziyor
+   ve tasarima uymuyordu. Hepsi bununla degistirildi. ------------------- */
+let _iletiKapat = null;
+
+function iletiKapat(deger){
+  document.getElementById("ileti").classList.add("gizli");
+  document.removeEventListener("keydown", _iletiTus);
+  if (_iletiKapat){ const f = _iletiKapat; _iletiKapat = null; f(deger); }
+}
+function _iletiTus(e){
+  if (e.key === "Escape") iletiKapat(null);
+  if (e.key === "Enter"){
+    const b = document.querySelector("#ileti-altlik button.ana");
+    if (b) b.click();
+  }
+}
+function ileti(ayar){
+  return new Promise(function(coz){
+    const o = document.getElementById("ileti");
+    o.className = "ortu " + (ayar.tur || "");
+    document.getElementById("ileti-pencere").classList.toggle("genis", !!ayar.genis);
+    document.getElementById("ileti-im").textContent =
+      ayar.simge || ({basarili:"✓", hata:"!", uyari:"!"}[ayar.tur] || "?");
+    document.getElementById("ileti-baslik").textContent = ayar.baslik || "";
+    const g = document.getElementById("ileti-govde");
+    g.innerHTML = ayar.govde || "";
+    if (ayar.cikti){
+      const p = document.createElement("pre");
+      p.className = "cikti";
+      p.textContent = ayar.cikti;
+      g.appendChild(p);
+    }
+    let kutu = null;
+    if (ayar.giris !== undefined){
+      kutu = document.createElement("input");
+      kutu.value = ayar.giris || "";
+      kutu.placeholder = ayar.ipucu || "";
+      g.appendChild(kutu);
+    }
+    const alt = document.getElementById("ileti-altlik");
+    alt.innerHTML = "";
+    (ayar.dugmeler || [{yazi:"Tamam", ana:true, deger:true}]).forEach(function(d){
+      const b = document.createElement("button");
+      b.textContent = d.yazi;
+      if (d.ana) b.className = "ana";
+      if (d.tehlike) b.className = "tehlike";
+      b.onclick = function(){
+        iletiKapat(d.deger === undefined ? true
+                   : (d.deger === "giris" ? (kutu ? kutu.value : "") : d.deger));
+      };
+      alt.appendChild(b);
+    });
+    _iletiKapat = coz;
+    o.classList.remove("gizli");
+    document.addEventListener("keydown", _iletiTus);
+    if (kutu){ kutu.focus(); kutu.select(); }
+  });
+}
+function bilgi(baslik, govde, tur){
+  return ileti({baslik, govde, tur: tur || "basarili"});
+}
+function onay(baslik, govde, tamamYazi, tehlike){
+  return ileti({baslik, govde, tur:"uyari", dugmeler:[
+    {yazi:"Vazgeç", deger:false},
+    {yazi:tamamYazi || "Devam et", ana:!tehlike, tehlike:!!tehlike, deger:true}]});
+}
+function soru(baslik, govde, varsayilan, ipucu){
+  return ileti({baslik, govde, giris: varsayilan || "", ipucu, dugmeler:[
+    {yazi:"Vazgeç", deger:null},
+    {yazi:"Tamam", ana:true, deger:"giris"}]});
+}
+function sonucGoster(ad, satirlar, hataMi, ekDugme){
+  const dugmeler = [{yazi:"Tamam", ana:!ekDugme, deger:true}];
+  if (ekDugme) dugmeler.push({yazi:ekDugme.yazi, ana:true, deger:"ek"});
+  ileti({baslik: hataMi ? (ad + " — sorun çıktı") : (ad + " tamamlandı"),
+         tur: hataMi ? "hata" : "basarili", genis:true,
+         cikti:(satirlar || []).join("\n"), dugmeler}).then(function(d){
+    if (d === "ek" && ekDugme) ekDugme.islev();
+  });
 }
 
 let acikSayfa = "calisma";
@@ -695,31 +834,37 @@ function kutBirlestirGuncelle(){
 }
 async function kutIslem(islem, ek){
   const c = await post("/api/kutuphane-islem", Object.assign({islem}, ek || {}));
-  if (c && c.mesaj) alert(c.mesaj);
+  if (c && c.mesaj) await bilgi("Kişi kütüphanesi", c.mesaj, c.ok ? "basarili" : "hata");
   kutuphaneYukle();
   durumGuncelle();
 }
 async function kutAdlandir(dugme){
   const eski = kutKartIsim(dugme);
-  const yeni = prompt("Yeni isim:", eski);
+  const yeni = await soru("Yeniden adlandır",
+    "<b>" + eski + "</b> kişisinin kütüphanedeki ismi:", eski, "Ad Soyad");
   if (yeni === null || yeni.trim() === "" || yeni === eski) return;
   kutIslem("adlandir", {eski, yeni: yeni.trim()});
 }
 async function kutSil(dugme){
   const isim = kutKartIsim(dugme);
-  if (!confirm('"' + isim + '" kütüphaneden silinecek.\n\n' +
-      "Fotoğraflara dokunulmaz; program bu kişiyi bir daha otomatik tanımaz. Devam?")) return;
+  if (!await onay("Kütüphaneden sil",
+      "<b>" + isim + "</b> kütüphaneden silinecek.<br><br>" +
+      "Fotoğraflara dokunulmaz; program bu kişiyi bir daha otomatik tanımaz.",
+      "Sil", true)) return;
   kutIslem("sil", {isim});
 }
 async function kutBirlestir(){
   const hedef = document.getElementById("kut-hedef").value;
   const kaynaklar = [...kutSecili].filter(i => i !== hedef);
   if (!hedef || !kaynaklar.length) return;
-  if (!confirm(kaynaklar.length + " kayıt \"" + hedef + "\" altında toplanacak. Devam?")) return;
+  if (!await onay("Kayıtları birleştir",
+      kaynaklar.length + " kayıt <b>" + hedef + "</b> altında toplanacak.<br><br>" +
+      "Örnekler birleşir, hiçbir bilgi kaybolmaz.", "Birleştir")) return;
   kutIslem("birlestir", {hedef, kaynaklar});
 }
 async function kutGeriYukle(){
-  const yol = prompt("Yedek dosyasının tam yolu:");
+  const yol = await soru("Yedekten geri yükle",
+    "Yedek dosyasının tam yolunu yapıştırın:", "", "C:\\...\\kutuphane-yedek-20260818.json");
   if (!yol) return;
   kutIslem("geri-yukle", {yol: yol.trim()});
 }
@@ -823,8 +968,10 @@ function secimiTemizle(){
 }
 async function secilenleriBirlestir(){
   const liste = [...secilenler].sort((a,b)=>a-b);
-  if(!confirm("Seçilen " + liste.length + " grup tek kişide birleştirilecek.\n\n" +
-      "kisi_" + String(liste[0]).padStart(4,"0") + " numarasında toplanacaklar. Devam?")) return;
+  if (!await onay("Grupları birleştir",
+      "Seçilen <b>" + liste.length + " grup</b> tek kişide birleştirilecek.<br><br>" +
+      "kisi_" + String(liste[0]).padStart(4,"0") + " numarasında toplanacaklar.",
+      "Birleştir")) return;
   const c = await post("/api/duzelt", {islem:"birlestir", kume: liste});
   if(c.hata) return uyar(c.hata);
   secimiTemizle();
@@ -833,27 +980,34 @@ async function secilenleriKlasorle(){
   const liste = [...secilenler].sort((a,b)=>a-b);
   const d = await al("/api/durum");
   if(!d.ayar.hedef_klasor) return uyar("Önce çıktı klasörünü seçin.");
-  if(!confirm("Yalnızca seçilen " + liste.length + " kişi klasörlenecek.\n\n" +
-              "Hedef: " + d.ayar.hedef_klasor + "\n\nDevam?")) return;
+  if (!await onay("Seçilenleri klasörle",
+      "Yalnızca seçilen <b>" + liste.length + " kişi</b> klasörlenecek." +
+      '<span class="yol">' + d.ayar.hedef_klasor + "</span>" +
+      "Diğer kişilere dokunulmaz.", "Klasörle")) return;
   const c = await post("/api/baslat", {adim:"klasorle", kisi: liste});
   if(c.hata) uyar(c.hata); else secimiTemizle();
 }
 async function secilenlereEtiket(){
   const liste = [...secilenler].sort((a,b)=>a-b);
-  if(!confirm("Yalnızca seçilen " + liste.length + " kişinin ismi fotoğraflara yazılacak.\n\nDevam?")) return;
+  if (!await onay("Seçilenlere isim yaz",
+      "Yalnızca seçilen <b>" + liste.length + " kişinin</b> ismi fotoğraflara yazılacak.",
+      "Yaz")) return;
   const c = await post("/api/baslat", {adim:"etiketle", kisi: liste});
   if(c.hata) uyar(c.hata); else secimiTemizle();
 }
 async function kisiBol(kume){
-  const e = prompt("Bu grupta iki farklı kişi mi var? Ayırmayı deneyeceğim.\n\n" +
-    "Eşik (küçültürsen daha çok parçaya böler):", "0.60");
-  if(e === null) return;
+  const e = await soru("Grubu böl",
+    "Bu grupta iki farklı kişi mi var? Ayırmayı deneyeceğim.<br><br>" +
+    "<b>Eşik:</b> küçültürsen daha çok parçaya böler. Ayıramazsa 0.50 deneyin, " +
+    "fazla parçalarsa 0.70 yapın.", "0.60");
+  if (e === null) return;
   const c = await post("/api/duzelt", {islem:"bol", kume, esik: parseFloat(e) || 0.60});
   if(c.hata) uyar(c.hata);
 }
 async function yuzCikar(yuzId, kume){
-  if(!confirm("Bu yüz bu kişiye ait değil mi?\n\nGruptan çıkarılacak " +
-              "(fotoğraf silinmez, sadece bu kişiden ayrılır).")) return;
+  if (!await onay("Bu kişi değil",
+      "Bu yüz gruptan çıkarılacak.<br><br>" +
+      "Fotoğraf <b>silinmez</b>, sadece bu kişiden ayrılır.", "Çıkar")) return;
   const c = await post("/api/duzelt", {islem:"cikar", yuz:[yuzId]});
   if(c.hata) uyar(c.hata);
 }

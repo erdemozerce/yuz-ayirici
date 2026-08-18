@@ -475,3 +475,26 @@ Uçlar: `GET /api/kutuphane`, `GET /api/rapor`, `POST /api/kutuphane-islem`
 
 Kişi tablosu, birlikte en çok görünen ikililer, klasör dağılımı — `cmd_rapor`'un
 verdiği bilgiler arayüzde tablo olarak.
+
+## Program penceresi — yerleşik kutular kaldırıldı (v1.17.0)
+
+Tarayıcının `alert` / `confirm` / `prompt` kutuları **"127.0.0.1:56568 says"** yazıyor,
+sistem gri kutusu olarak çıkıyor ve tasarımla hiç ilgisi yok. **13 çağrının tamamı**
+programın kendi penceresiyle değiştirildi (`arayuz.html` içinde `ileti()` ve yardımcıları
+`onay()`, `soru()`, `bilgi()`, `sonucGoster()`).
+
+- Ekranın **ortasında**, bulanık arka plan, yumuşak giriş animasyonu
+- Türüne göre renkli simge (soru / başarılı / uyarı / hata)
+- Klasör yolları `<span class="yol">` ile tek satırlık kutuda, kırpılmadan
+- `Esc` kapatır, `Enter` ana düğmeyi çalıştırır
+- Hepsi Promise döndürüyor; çağıran işlevlerin tamamı zaten `async` (doğrulandı)
+
+### Kısa işlemlerde geri bildirim sorunu
+
+"Önce hesapla" gibi saniyeler süren işlemlerde çıktı sayfanın **yukarısındaki** günlük
+kutusuna düşüyordu; kullanıcı aşağıda, düğmenin yanında olduğu için "çalışmadı" sanıyordu.
+Aynı hata sınıfı bu projede üçüncü kez çıktı (deneme turu, kopuk bağlantı, şimdi bu).
+
+Artık **her işlem bitince** sonuç penceresi ekranın ortasında açılıyor ve çıktının
+tamamını gösteriyor. Ön izlemede ayrıca **"Klasörleri şimdi oluştur"** düğmesi çıkıyor —
+hesaplamadan sonra doğal adım.
