@@ -317,3 +317,57 @@ gruplandı, bulanık kare en düşük puanı aldı, en net kare seçildi.
 `export` ve `etiketle` artık `--kisi 3 7` ve `--sadece-isimli` alıyor;
 `export --secki-atla` işaretli kareleri dışarıda bırakıyor. Arayüzde kartları
 işaretleyip *Sadece bunları klasörle* / *Sadece bunlara isim yaz* denebiliyor.
+
+## Onay/veto, künye ve teslim paketi (v1.12.0)
+
+### 5 · Oyuncu onay/veto (kill list)
+
+`onay` komutu + `onay` tablosu. Oyuncu/ajans genelde sadece **dosya adı** gönderir
+(`DSC_1234.jpg`), tam yol değil — eşleştirme hem tam yolu hem adı hem uzantısız adı
+dener, eşleşmeyenleri raporlar. Vetolu kareler `export`, `etiketle` ve `teslim`
+adımlarında **otomatik dışarıda kalır** (`--vetoyu-yoksay` ile zorlanabilir).
+Veto kişiye özel de olabilir (`--kisi 3`) ya da tüm kişiler için.
+
+### 6 · Künye / caption şablonu
+
+`etiketle --kunye`. Yer tutucular: `{yapim} {bolum} {sahne} {kisiler} {dosya} {klasor}`.
+Yazılan alanlar — XMP: `dc.title`, `dc.description`, `dc.creator`, `dc.rights`,
+`photoshop.Headline/Credit/Source`; IPTC: `ObjectName`, `Caption`, `Byline`,
+`Copyright`, `Credit`, `Source` (IPTC uzunluk sınırları uygulanır).
+Ayarlar `ayarlar.json` içindeki `kunye` bloğunda ya da komut satırından.
+
+### 7 · Teslim paketi
+
+`teslim` komutu + `teslim.py`. Uzun kenarı küçültür, filigran basar, **metadata'yı
+yeni dosyaya taşır** (yüz bölgeleri 0–1 oranlı olduğu için küçültmede geçerli kalır),
+Pillow ile **PDF kontak baskısı** üretir. Aynı kişi/seçki/veto filtrelerini kullanır.
+Orijinal dosyalara dokunmaz.
+
+---
+
+## İKİ KRİTİK DÜZELTME (v1.12.0)
+
+### Türkçe karakterli yollar — metadata hiç yazılamıyordu
+
+`pyexiv2`/exiv2 dosya adını işletim sisteminin ANSI kod sayfasıyla açıyor; bu makinede
+`cp1252` ve Türkçe `ı/ş/ğ` harflerini **temsil edemiyor**. Denenen tüm kodlamalar
+(utf-8, cp1252, mbcs, cp1254, latin-1) başarısız oldu.
+
+Kardeşin gerçek klasörü `E:\...\8-9-10 Şubat\9. Bölümaw-jpeg` — yani metadata
+özelliği asıl arşivde **hiç çalışmayacaktı**. Testler ASCII yollarda yapıldığı için
+gözden kaçmıştı.
+
+Çözüm — `etiket.acilabilir()` üç kademeli:
+1. Yol zaten ASCII → doğrudan (maliyet yok)
+2. Windows 8.3 kısa yolu (`GetShortPathNameW`) → saf ASCII (maliyet yok)
+3. 8.3 kapalıysa (exFAT'te olabilir) → geçici ASCII isimli kopya, işlem sonrası geri yazılır
+
+### Dosya tarihi değişiyordu — her tarama baştan başlardı
+
+Metadata yazımı `mtime`'ı güncelliyordu. `scan` artımlı çalışmak için `mtime`
+karşılaştırıyor; yani `etiketle` sonrası bir sonraki tarama **10.000 fotoğrafı
+yeniden tarardı (5–6 saat)**. `acilabilir()` çıkışta `os.utime` ile orijinal
+tarihi geri yazıyor.
+
+İkisi de kardeşinin klasör yapısı taklit edilerek doğrulandı
+(`8-9-10 Şubat/9. Bölüm/raw-jpeg/DSC_öçşğı_01.jpg` + `.cr2` yan dosyası).

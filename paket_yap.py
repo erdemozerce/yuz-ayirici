@@ -31,6 +31,7 @@ ICERIK = [
     "arayuz.html",
     "kutuphane.py",
     "etiket.py",
+    "teslim.py",
     "baslat.py",
     "guncelle.py",
     "kurulum_testi.py",

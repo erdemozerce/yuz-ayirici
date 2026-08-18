@@ -19,11 +19,12 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.11.0"
+__version__ = "1.12.0"
 
 import argparse
 import base64
 import csv
+import json
 import os
 import re
 import shutil
@@ -117,6 +118,14 @@ def db_connect(path):
     for ad in ("netlik", "goz", "yaw", "pitch"):
         if ad not in yuz_sutun:
             con.execute("ALTER TABLE faces ADD COLUMN %s REAL" % ad)
+    con.execute("""CREATE TABLE IF NOT EXISTS onay(
+        path   TEXT NOT NULL,
+        kisi   INTEGER,
+        durum  TEXT NOT NULL,
+        kaynak TEXT,
+        tarih  TEXT,
+        PRIMARY KEY (path, kisi)
+    )""")
     con.execute("""CREATE TABLE IF NOT EXISTS secki(
         path   TEXT PRIMARY KEY,
         bayrak TEXT,
@@ -313,8 +322,10 @@ def imza_farki(a, b):
 def cekim_zamani(yol):
     try:
         import pyexiv2
-        with pyexiv2.Image(str(yol)) as im:
-            e = im.read_exif()
+        import etiket as _et
+        with _et.acilabilir(yol) as _acik:
+            with pyexiv2.Image(_acik) as im:
+                e = im.read_exif()
         for k in ("Exif.Photo.DateTimeOriginal", "Exif.Image.DateTime"):
             if e.get(k):
                 return e[k]
@@ -858,6 +869,113 @@ def cmd_cikar(args):
 # --------------------------------------------------------------------------
 # 3) REVIEW — kimin kim oldugunu gormek icin HTML + isim dosyasi
 # --------------------------------------------------------------------------
+def _dosya_eslestir(con, satirlar):
+    """
+    Oyuncu/ajans genelde sadece dosya ADINI gonderir (DSC_1234.jpg).
+    Tam yol da gelebilir. Ikisini de eslestirir.
+    """
+    tum = [r[0] for r in con.execute("SELECT path FROM files")]
+    ad_haritasi = {}
+    for p in tum:
+        ad_haritasi.setdefault(os.path.basename(p).lower(), []).append(p)
+        ad_haritasi.setdefault(os.path.splitext(os.path.basename(p))[0].lower(), []).append(p)
+    tam = {p.lower(): p for p in tum}
+
+    bulunan, bulunamayan = [], []
+    for ham in satirlar:
+        t = ham.strip().strip('"').strip()
+        if not t or t.startswith("#"):
+            continue
+        if t.lower() in tam:
+            bulunan.append(tam[t.lower()])
+            continue
+        anahtar = os.path.basename(t).lower()
+        adaylar = ad_haritasi.get(anahtar) or ad_haritasi.get(os.path.splitext(anahtar)[0].lower())
+        if adaylar:
+            bulunan.extend(adaylar)
+        else:
+            bulunamayan.append(t)
+    return sorted(set(bulunan)), bulunamayan
+
+
+def cmd_onay(args):
+    """Oyuncu vetosu (kill list) ve onay kayitlari."""
+    con = db_connect(args.db)
+
+    if args.liste:
+        satirlar = con.execute(
+            "SELECT durum, COUNT(*) FROM onay GROUP BY durum").fetchall()
+        if not satirlar:
+            print("Onay/veto kaydi yok.")
+            return
+        print()
+        print("ONAY DURUMU")
+        print("-" * 50)
+        for durum, adet in satirlar:
+            print("  %-10s %5d kare" % (durum, adet))
+        print("-" * 50)
+        for p, k, d, kay in con.execute(
+                "SELECT path, kisi, durum, kaynak FROM onay ORDER BY durum, path LIMIT 15"):
+            print("  %-9s %-28s %s" % (d, os.path.basename(p),
+                                       ("kisi_%04d" % k) if k else "tum kisiler"))
+        toplam = con.execute("SELECT COUNT(*) FROM onay").fetchone()[0]
+        if toplam > 15:
+            print("  ... ve %d kayit daha" % (toplam - 15))
+        return
+
+    if args.temizle:
+        n = con.execute("SELECT COUNT(*) FROM onay").fetchone()[0]
+        con.execute("DELETE FROM onay")
+        con.commit()
+        print("%d onay/veto kaydi silindi." % n)
+        return
+
+    durum = "red" if args.red else "onayli"
+    kisi = int(args.kisi) if args.kisi else None
+
+    yollar = []
+    if args.kisi and args.hepsi:
+        soru = "SELECT DISTINCT path FROM faces WHERE cluster = ?"
+        yollar = [r[0] for r in con.execute(soru, (kisi,))]
+        print("kisi_%04d icin %d kare isaretlenecek." % (kisi, len(yollar)))
+    elif args.dosya:
+        p = Path(args.dosya)
+        if not p.exists():
+            print("Liste dosyasi bulunamadi: %s" % p)
+            return
+        ham = p.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+        yollar, eksik = _dosya_eslestir(con, ham)
+        print("%d satirdan %d kare eslesti." % (len([x for x in ham if x.strip()]), len(yollar)))
+        if eksik:
+            print("Eslesmeyen %d satir (ilk 5):" % len(eksik))
+            for e in eksik[:5]:
+                print("   " + e)
+    elif args.foto:
+        yollar, eksik = _dosya_eslestir(con, args.foto)
+        if eksik:
+            print("Eslesmeyen: %s" % ", ".join(eksik))
+    else:
+        print("Ne isaretlenecegini belirtin:")
+        print("  --dosya veto.txt            (oyuncudan gelen liste)")
+        print("  --foto DSC_1234.jpg ...     (tek tek)")
+        print("  --kisi 3 --hepsi            (o kisinin tum kareleri)")
+        return
+
+    if not yollar:
+        print("Isaretlenecek kare bulunamadi.")
+        return
+
+    con.executemany(
+        "INSERT OR REPLACE INTO onay(path,kisi,durum,kaynak,tarih) VALUES(?,?,?,?,?)",
+        [(y, kisi, durum, args.kaynak or "", time.strftime("%Y-%m-%d %H:%M")) for y in yollar])
+    con.commit()
+    print("%d kare '%s' olarak isaretlendi%s."
+          % (len(yollar), durum, (" (kisi_%04d)" % kisi) if kisi else ""))
+    if durum == "red":
+        print("Klasorleme ve isim yazmada bu kareler otomatik disarida birakilir.")
+        print("(Zorlamak icin: --vetoyu-yoksay)")
+
+
 def cmd_secki(args):
     """Bulanik, gozu kapali ve tekrar kareleri isaretler; her seride en iyiyi secer."""
     con = db_connect(args.db)
@@ -1104,9 +1222,23 @@ def cmd_etiketle(args):
             print("  Iptal edildi - hicbir dosyaya dokunulmadi.")
             return
     print()
+    kunye = None
+    if args.kunye:
+        kunye = dict(etiket.VARSAYILAN_KUNYE)
+        try:
+            ayar = json.loads(Path(args.ayarlar).read_text(encoding="utf-8"))
+            kunye.update(ayar.get("kunye") or {})
+        except Exception:
+            pass
+        kunye["aktif"] = True
+        for alan in ("yapim", "bolum", "sahne", "fotografci", "telif", "kaynak"):
+            deger = getattr(args, alan, "")
+            if deger:
+                kunye[alan] = deger
     etiket.etiketle(args.db, args.names or "isimler.csv", mod=args.mod,
                     limit=args.limit, dogrula_adet=args.dogrula,
-                    kisiler=[int(k) for k in args.kisi] if args.kisi else None)
+                    kisiler=[int(k) for k in args.kisi] if args.kisi else None,
+                    kunye=kunye)
 
 
 # --------------------------------------------------------------------------
@@ -1153,6 +1285,80 @@ def hardlink_denemesi(ornek_kaynak, hedef_dizin):
     return sonuc
 
 
+def cmd_teslim(args):
+    """Secilen kareleri kucultup filigranlayarak teslim paketine cevirir."""
+    import teslim as tp
+
+    con = db_connect(args.db)
+    isimler = isim_csv_oku(args.names or "isimler.csv")
+
+    secili = set(int(k) for k in (args.kisi or []))
+    if args.sadece_isimli:
+        isimliler = {c for c, ad in isimler.items() if ad}
+        secili = (secili & isimliler) if secili else isimliler
+
+    elenen = set()
+    if not args.secki_yoksay:
+        try:
+            elenen = {r[0] for r in con.execute("SELECT path FROM secki WHERE bayrak != ''")}
+        except Exception:
+            elenen = set()
+    veto = {}
+    try:
+        for p, k in con.execute("SELECT path, kisi FROM onay WHERE durum = 'red'"):
+            veto.setdefault(p, set()).add(k)
+    except Exception:
+        pass
+
+    kayitlar = {}
+    for cid, yol in con.execute(
+            "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+        if secili and cid not in secili:
+            continue
+        if yol in elenen:
+            continue
+        v = veto.get(yol)
+        if v is not None and (None in v or cid in v):
+            continue
+        ad = isimler.get(cid) or ("kisi_%04d" % cid)
+        kayitlar.setdefault(yol, []).append(ad)
+
+    if not kayitlar:
+        print("Teslim edilecek kare yok. Filtreleri gevsetin ya da once isimlendirin.")
+        return
+
+    dosyalar = []
+    for yol, adlar in sorted(kayitlar.items()):
+        alt = safe_folder_name(sorted(adlar)[0]) if args.kisiye_gore else None
+        dosyalar.append((yol, alt))
+
+    print()
+    print("=" * 66)
+    print("  TESLIM PAKETI")
+    print("=" * 66)
+    print("  Kare sayisi   : %d" % len(dosyalar))
+    print("  Uzun kenar    : %d px   Kalite: %d" % (args.boyut, args.kalite))
+    print("  Filigran      : %s" % (args.filigran or "yok"))
+    print("  Duzen         : %s" % ("kisiye gore klasor" if args.kisiye_gore else "tek klasor"))
+    print("  Kontak baskisi: %s" % ("evet (PDF)" if not args.kontak_yok else "hayir"))
+    print("  Hedef         : %s" % args.dst)
+    print("  Not           : orijinallere dokunulmaz, metadata yeni dosyalara tasinir.")
+    print("=" * 66)
+    if not args.evet:
+        try:
+            print()
+            c = input("  Devam edilsin mi? (E = evet / h = hayir): ").strip().lower()
+        except EOFError:
+            c = "h"
+        if c not in ("", "e", "evet", "y", "yes"):
+            print("  Iptal edildi.")
+            return
+    print()
+    tp.paket_yap(dosyalar, args.dst, uzun_kenar=args.boyut, kalite=args.kalite,
+                 filigran=args.filigran, kontak=not args.kontak_yok,
+                 baslik=args.baslik or Path(args.dst).name)
+
+
 def cmd_export(args):
     con = db_connect(args.db)
     names = {}
@@ -1165,6 +1371,16 @@ def cmd_export(args):
         print(f"{len(names)} kisi ismi okundu.")
 
     elenen = set()
+    veto = {}
+    if not getattr(args, "vetoyu_yoksay", False):
+        try:
+            for p, k in con.execute("SELECT path, kisi FROM onay WHERE durum = 'red'"):
+                veto.setdefault(p, set()).add(k)
+        except Exception:
+            veto = {}
+        if veto:
+            print("Veto: %d kare icin oyuncu onayi yok." % len(veto))
+
     if getattr(args, "secki_atla", False):
         try:
             elenen = {r[0] for r in con.execute(
@@ -1196,6 +1412,9 @@ def cmd_export(args):
             continue
         if secili and cid not in secili:
             continue
+        v = veto.get(path)
+        if v is not None and (None in v or cid in v):
+            continue                      # bu kare (bu kisi icin) vetolu
         groups.setdefault(cid, []).append(path)
 
     if args.export_unknown:
@@ -1455,6 +1674,18 @@ def main():
     ck.add_argument("--yuz", nargs="+", required=True, help="cikarilacak yuz id'leri")
     ck.set_defaults(func=cmd_cikar)
 
+    on = sub.add_parser("onay", help="oyuncu onay/veto (kill) listesi")
+    on.add_argument("--db", default="faces.db")
+    on.add_argument("--dosya", default="", help="oyuncudan gelen liste dosyasi (her satir bir kare)")
+    on.add_argument("--foto", nargs="+", default=None, help="tek tek dosya adlari")
+    on.add_argument("--kisi", default="", help="hangi kisi icin (bos = tum kisiler)")
+    on.add_argument("--hepsi", action="store_true", help="--kisi ile: o kisinin tum kareleri")
+    on.add_argument("--red", action="store_true", help="vetola (varsayilan: onayla)")
+    on.add_argument("--kaynak", default="", help="not: kimden geldi")
+    on.add_argument("--liste", action="store_true", help="mevcut kayitlari goster")
+    on.add_argument("--temizle", action="store_true", help="tum onay/veto kayitlarini sil")
+    on.set_defaults(func=cmd_onay)
+
     sk = sub.add_parser("secki", help="bulanik / gozu kapali / tekrar kareleri isaretle")
     sk.add_argument("--db", default="faces.db")
     sk.add_argument("--netlik", type=float, default=0,
@@ -1519,8 +1750,31 @@ def main():
     m.add_argument("--limit", type=int, default=0, help="deneme icin ilk N fotograf")
     m.add_argument("--dogrula", type=int, default=5,
                    help="ilk N dosyada goruntu bozulmadi mi diye kontrol et")
+    m.add_argument("--kunye", action="store_true",
+                   help="yapim/bolum/telif/fotografci bilgisini de yaz (caption)")
+    m.add_argument("--ayarlar", default="ayarlar.json", help="kunye ayarlarinin dosyasi")
+    for _alan, _yardim in (("yapim", "dizi/film adi"), ("bolum", "bolum no/adi"),
+                           ("sahne", "sahne"), ("fotografci", "fotografci adi"),
+                           ("telif", "telif metni"), ("kaynak", "kaynak/kredi")):
+        m.add_argument("--" + _alan, default="", help=_yardim + " (kunye icin)")
     m.add_argument("--evet", action="store_true", help="onay sormadan yaz")
     m.set_defaults(func=cmd_etiketle)
+
+    tl = sub.add_parser("teslim", help="kucultulmus + filigranli teslim paketi ve kontak baskisi")
+    tl.add_argument("--db", default="faces.db")
+    tl.add_argument("--names", default="isimler.csv")
+    tl.add_argument("--dst", required=True)
+    tl.add_argument("--boyut", type=int, default=2048, help="uzun kenar (px)")
+    tl.add_argument("--kalite", type=int, default=88, help="JPEG kalitesi")
+    tl.add_argument("--filigran", default="", help="basilacak filigran metni")
+    tl.add_argument("--baslik", default="", help="kontak baskisi basligi")
+    tl.add_argument("--kisi", nargs="+", default=None, help="yalnizca bu kisiler")
+    tl.add_argument("--sadece-isimli", action="store_true")
+    tl.add_argument("--kisiye-gore", action="store_true", help="kisi adiyla alt klasorler")
+    tl.add_argument("--secki-yoksay", action="store_true", help="secki isaretlerini dikkate alma")
+    tl.add_argument("--kontak-yok", action="store_true", help="PDF kontak baskisi uretme")
+    tl.add_argument("--evet", action="store_true")
+    tl.set_defaults(func=cmd_teslim)
 
     e = sub.add_parser("export", help="kisi klasorlerini olustur")
     e.add_argument("--db", default="faces.db")
@@ -1540,6 +1794,8 @@ def main():
                    help="yalnizca bu kisi numaralarini isle (or: --kisi 3 7)")
     e.add_argument("--sadece-isimli", action="store_true",
                    help="yalnizca isim verilmis kisileri isle")
+    e.add_argument("--vetoyu-yoksay", action="store_true",
+                   help="oyuncu vetosunu dikkate alma (varsayilan: vetolular disarida)")
     e.add_argument("--secki-atla", action="store_true",
                    help="secki ile isaretlenen bulanik/tekrar/gozu kapali kareleri disarida birak")
     e.add_argument("--dry-run", action="store_true", help="dosya tasimadan sadece raporla")

@@ -1,6 +1,6 @@
 {
-  "surum": "1.11.0",
-  "notlar": "Secki (bulanik/gozu kapali/tekrar kare) ve sadece secilen kisileri isleme",
+  "surum": "1.12.0",
+  "notlar": "Oyuncu veto listesi, kunye/caption sablonu, teslim paketi + Turkce yol ve dosya tarihi duzeltmeleri",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,7 +10,7 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "13b8765a9cef96fd654f25fd7d70e2ce361af1468059970a2617a919919e0e5d"
+      "sha256": "208a6ce4ae59f1914d666d0cf8870732288e85aa03629f87c3e7c57f8dd34819"
     },
     {
       "ad": "arayuz.py",
@@ -30,7 +30,12 @@
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "783e806c735cc9c02723c74e9632d95dc028d106db1683d47643dd2601197a50"
+      "sha256": "5052351d5541fc3663e48b80d43cc8b3d43ebce4ae9c344d8dd61fc9145159c2"
+    },
+    {
+      "ad": "teslim.py",
+      "url": "teslim.py",
+      "sha256": "ff79e9d4449c5f4e8e9fa5802d489ce86e8f23aa6d57a84d935d99b651577aba"
     },
     {
       "ad": "baslat.py",

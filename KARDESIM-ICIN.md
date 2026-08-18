@@ -236,6 +236,28 @@ Yanlış damga vurmamak için ölçütler temkinli: bir kişinin göz oranı sü
 
 ---
 
+## 3f. Oyuncu onayı (veto listesi)
+
+Oyuncu ya da ajans "şu kareleri kullanma" derse, gelen listeyi bir metin dosyasına
+yapıştır (her satırda bir dosya adı) ve programa ver. O kareler bundan sonra
+klasörlemeye, isim yazmaya ve teslim paketine **hiç girmez**.
+
+Liste tam yol içermek zorunda değil — `DSC_1234.jpg` yazması yeterli.
+
+## 3g. Teslim paketi
+
+Seçtiğin kareleri küçültülmüş JPEG olarak ayrı bir klasöre çıkarır, istersen
+filigran basar ve **PDF kontak baskısı** üretir. İsim/künye/telif bilgisi
+küçültülmüş dosyalara da taşınır. Orijinallere dokunulmaz.
+
+## 3h. Künye (yapım, bölüm, telif)
+
+Fotoğraflara dizi adı, bölüm, çekim sahibi ve telif bilgisini de yazdırabilirsin.
+Örnek açıklama: *"Sumud 9. Bölüm — Karede: Ahmet Yılmaz"*. Bu bilgi ACDSee'de,
+Lightroom'da ve yapımın sisteminde görünür.
+
+---
+
 ## 4. Gruplar yanlış çıkarsa
 
 Artık her şeyi baştan gruplamana gerek yok, panelden düzeltebilirsin:
