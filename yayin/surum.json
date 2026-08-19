@@ -1,6 +1,6 @@
 {
-  "surum": "1.20.1",
-  "notlar": "Bozuk arayuz duzeltmesi + gorsel ve raporlama gelistirmeleri",
+  "surum": "1.20.2",
+  "notlar": "Klasorleme cokme hatasi duzeltildi + kapsama/sahne raporlari, gorunum destegi, geri alma",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,12 +10,12 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "9b56b44ce3f8d89dfa65aaefd8a7581cf6d898d0f797113dbce1a34354158267"
+      "sha256": "731fa921968049adbef46553cc18eb05faec282c76d65672e05d2921ee20923a"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "60de119c50de189a1ee0e7f75c0c61ebc643e3e5def0b08de84a0635080edd7a"
+      "sha256": "45bce4c59ca8f7920daeb7dc0b078c0ca0b24ecad1fbedc96a515ca39e9ddd50"
     },
     {
       "ad": "pencere.py",
@@ -25,17 +25,17 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "e20099e53626769288dcb7a0e524e4ccc5266e595e61fd8cb79d54d8fc589601"
+      "sha256": "53314b62c49a6517a13fd79b06f86654065cb4135fe77fd578d2da189efa92ce"
     },
     {
       "ad": "kutuphane.py",
       "url": "kutuphane.py",
-      "sha256": "65c45ee52a5e42e2bbde1642ee265cfe8453ed6fe5294df9e7f383d07b01581a"
+      "sha256": "7e4488bba3cc5e5b4cc18c99e5fee0c602a1b5aacac8e40a690fac28d048b663"
     },
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "c81e1b327c2e1c9a689a8dd6291c9642dd4bb6f44453cc2d00db9036fb8c4377"
+      "sha256": "f6870b2fd34b5942e46f5b2d23a913930b87e03b21570d4927a16fd826564827"
     },
     {
       "ad": "teslim.py",

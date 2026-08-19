@@ -16,6 +16,7 @@ import os
 import queue
 import re
 import secrets
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -110,7 +111,7 @@ def ayar_oku():
         "eps": 0.50, "min_samples": 3, "mod": "auto",
         "duzen": "altklasor-kisi", "derinlik": 0, "etiket_mod": "gomulu",
         "secki_atla": False, "hizli_tarama": False, "kaliteli_tarama": False,
-    "tema": "sistem",
+    "iki_asama": False, "tema": "sistem",
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -303,8 +304,7 @@ def kisi_kareleri(cid, adet=12):
     yol = Path(db_yolu())
     if not yol.exists():
         return []
-    con = sqlite3.connect(str(yol))
-    con.executescript(motor.DB_SCHEMA)
+    con = motor.db_connect(str(yol))
     try:
         satirlar = [r[0] for r in con.execute(
             "SELECT path FROM faces WHERE cluster=? GROUP BY path "
@@ -329,10 +329,15 @@ def kutuphane_listesi():
     try:
         import kutuphane
         c = kutuphane.ac(kut)
+        try:
+            gorunum = {x["isim"]: x["gorunum"] for x in kutuphane.gorunum_ozeti(c)}
+        except Exception:
+            gorunum = {}
         out = []
         for isim, adet, eklenme, guncelleme, kapak in kutuphane.liste(c, kapakli=True):
             out.append({
                 "isim": isim, "ornek": adet,
+                "gorunum": gorunum.get(isim, 1),
                 "eklenme": eklenme or "", "guncelleme": guncelleme or "",
                 "kapak": ("data:image/jpeg;base64," + base64.b64encode(kapak).decode("ascii"))
                          if kapak else "",
@@ -343,14 +348,357 @@ def kutuphane_listesi():
         return []
 
 
+# Kullanilabilirlik esikleri: secki (ayiklama) ile ayni degerler kullaniliyor
+# ki rapor ile ayiklama ayni seyi "iyi kare" saysin.
+NETLIK_TABAN = 22.0        # Laplacian varyansi - altinda gozle gorulur bulanik
+MIN_YUZ_PX = 120.0         # bundan kucuk yuz baskiya/teslime uygun degil
+GOZ_ORANI = 0.72           # kisinin kendi ortalamasinin altinda kalirsa goz kapali
+
+
+def kapsama_verisi(con, ad_ver, en_az=5):
+    """
+    Kisi basina KULLANILABILIR kare sayisi.
+
+    Neden: set fotografcisinin isi "her oyuncudan yayina girecek kare getirmek".
+    Toplam kare sayisi yanilticidir - 40 karenin hepsi bulanik olabilir.
+    Burada net, gozu acik ve yuzu yeterince buyuk kareleri sayiyoruz; sayisi
+    dusuk olanlari isaretliyoruz ki set dagilmadan cekilebilsin.
+    """
+    satirlar = list(con.execute(
+        "SELECT cluster, path, COALESCE(netlik,0), goz, (x2-x1) "
+        "FROM faces WHERE cluster > 0"))
+    if not satirlar:
+        return []
+
+    # goz acikligi kisiye gore degisiyor (birinin normali 0.14, digerinin 0.33),
+    # bu yuzden mutlak esik degil, kisinin kendi ortancasi kullaniliyor.
+    goz_kayit = {}
+    for cid, _p, _n, g, _w in satirlar:
+        if g is not None:
+            goz_kayit.setdefault(cid, []).append(float(g))
+    taban = {}
+    for cid, degerler in goz_kayit.items():
+        if len(degerler) >= 5:
+            degerler = sorted(degerler)
+            taban[cid] = degerler[len(degerler) // 2] * GOZ_ORANI
+
+    toplam, iyi, kusur = {}, {}, {}
+    for cid, p, netlik, goz, yuz_px in satirlar:
+        toplam.setdefault(cid, set()).add(p)
+        k = kusur.setdefault(cid, {"bulanik": 0, "kucuk": 0, "goz": 0})
+        if netlik and netlik < NETLIK_TABAN:
+            k["bulanik"] += 1
+            continue
+        if (yuz_px or 0) < MIN_YUZ_PX:
+            k["kucuk"] += 1
+            continue
+        if cid in taban and goz is not None and float(goz) < taban[cid]:
+            k["goz"] += 1
+            continue
+        iyi.setdefault(cid, set()).add(p)
+
+    cikti = []
+    for cid in sorted(toplam, key=lambda c: len(iyi.get(c, ()))):
+        n_iyi = len(iyi.get(cid, ()))
+        cikti.append({
+            "kume": cid, "ad": ad_ver(cid),
+            "kare": len(toplam[cid]), "kullanilabilir": n_iyi,
+            "yetersiz": n_iyi < en_az,
+            "bulanik": kusur[cid]["bulanik"], "kucuk": kusur[cid]["kucuk"],
+            "goz": kusur[cid]["goz"],
+        })
+    return cikti
+
+
+def topluluk_kareleri(kare_kisi, ad_ver, adet=15):
+    """En cok oyuncunun bir arada oldugu kareler - tanitim/afis icin istenen."""
+    sirali = sorted(kare_kisi.items(), key=lambda kv: -len(kv[1]))
+    cikti = []
+    for yolu, kumeler in sirali[:adet]:
+        if len(kumeler) < 2:
+            break
+        cikti.append({"ad": os.path.basename(yolu), "klasor": os.path.dirname(yolu),
+                      "kisi_sayisi": len(kumeler),
+                      "kisiler": ", ".join(sorted(ad_ver(c) for c in kumeler))})
+    return cikti
+
+
+def _olculeri_tamamla(con, yollar, sinir=400):
+    """
+    Eksik en/boy bilgisini dosya BASLIGINDAN okur (kareyi cozmeden).
+    Eski veritabanlarinda bu sutunlar bos; tek seferlik doldurulur.
+    """
+    eksik = [p for p in yollar if p]
+    if not eksik:
+        return
+    try:
+        from PIL import Image
+    except Exception:
+        return
+    yazilacak = []
+    for p in eksik[:sinir]:
+        try:
+            with Image.open(p) as im:
+                try:                       # etiketli dikey kare gercekte dikeydir
+                    yon = int((im.getexif() or {}).get(274, 1))
+                except Exception:
+                    yon = 1
+                en, boy = im.size
+                if yon in (5, 6, 7, 8):
+                    en, boy = boy, en
+            yazilacak.append((en, boy, p))
+        except Exception:
+            continue
+    if yazilacak:
+        con.executemany("UPDATE files SET en=?, boy=? WHERE path=?", yazilacak)
+        con.commit()
+
+
+def dikey_kapsama(con, kare_kisi, ad_ver):
+    """
+    Hangi oyuncunun hic DIKEY karesi yok? Sosyal medya dikey istiyor,
+    yatay arsivden dikey kare uretilemiyor.
+    """
+    eksikler = [r[0] for r in con.execute(
+        "SELECT path FROM files WHERE (en IS NULL OR boy IS NULL) AND n_faces > 0")]
+    if eksikler:
+        _olculeri_tamamla(con, eksikler)
+    yon = {p: (en, boy) for p, en, boy in con.execute(
+        "SELECT path, en, boy FROM files WHERE en IS NOT NULL AND boy IS NOT NULL")}
+    if not yon:
+        return []
+    sayac = {}
+    for yolu, kumeler in kare_kisi.items():
+        olcu = yon.get(yolu)
+        if not olcu:
+            continue
+        dikey = olcu[1] > olcu[0]
+        for c in kumeler:
+            k = sayac.setdefault(c, [0, 0])
+            k[1 if dikey else 0] += 1
+    return [{"kume": c, "ad": ad_ver(c), "yatay": v[0], "dikey": v[1],
+             "yok": v[1] == 0}
+            for c, v in sorted(sayac.items(), key=lambda kv: kv[1][1])]
+
+
+GERI_AL_SEMA = """
+CREATE TABLE IF NOT EXISTS geri_al(
+    parti    INTEGER,
+    zaman    TEXT,
+    aciklama TEXT,
+    yuz      INTEGER,
+    kume     INTEGER
+);
+CREATE TABLE IF NOT EXISTS geri_al_isim(
+    parti   INTEGER PRIMARY KEY,
+    icerik  TEXT
+);
+"""
+
+
+def geri_al_kaydet(aciklama, yuz_idler=None, kumeler=None):
+    """
+    Duzeltme oncesi durumu bir partiye yazar.
+
+    yuz_idler verilirse o yuzler, kumeler verilirse o kumelerdeki tum yuzler
+    kaydedilir. isimler.csv de saklanir cunku birlestirme isim satirlarini
+    da degistiriyor.
+    """
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return
+    try:
+        con = motor.db_connect(str(yol))
+        con.executescript(GERI_AL_SEMA)
+        if yuz_idler:
+            satirlar = list(con.execute(
+                "SELECT id, cluster FROM faces WHERE id IN (%s)"
+                % ",".join("?" * len(yuz_idler)), [int(y) for y in yuz_idler]))
+        elif kumeler:
+            satirlar = list(con.execute(
+                "SELECT id, cluster FROM faces WHERE cluster IN (%s)"
+                % ",".join("?" * len(kumeler)), [int(k) for k in kumeler]))
+        else:
+            con.close()
+            return
+        if not satirlar:
+            con.close()
+            return
+        parti = (con.execute("SELECT COALESCE(MAX(parti),0)+1 FROM geri_al").fetchone()[0])
+        simdi = time.strftime("%Y-%m-%d %H:%M:%S")
+        con.executemany("INSERT INTO geri_al(parti,zaman,aciklama,yuz,kume) "
+                        "VALUES(?,?,?,?,?)",
+                        [(parti, simdi, aciklama, y, k) for y, k in satirlar])
+        isim_dosya = BASE / "isimler.csv"
+        if isim_dosya.exists():
+            con.execute("INSERT OR REPLACE INTO geri_al_isim(parti,icerik) VALUES(?,?)",
+                        (parti, isim_dosya.read_text(encoding="utf-8-sig")))
+        # gecmisi sinirli tut
+        con.execute("DELETE FROM geri_al WHERE parti <= ?", (parti - 20,))
+        con.execute("DELETE FROM geri_al_isim WHERE parti <= ?", (parti - 20,))
+        con.commit()
+        con.close()
+    except Exception:
+        pass
+
+
+def geri_al_listesi():
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return []
+    try:
+        con = motor.db_connect(str(yol))
+        con.executescript(GERI_AL_SEMA)
+        satirlar = list(con.execute(
+            "SELECT parti, zaman, aciklama, COUNT(*) FROM geri_al "
+            "GROUP BY parti ORDER BY parti DESC LIMIT 10"))
+        con.close()
+        return [{"parti": p, "zaman": z, "aciklama": a, "yuz": n}
+                for p, z, a, n in satirlar]
+    except Exception:
+        return []
+
+
+def geri_al_uygula(parti=None):
+    """Son (ya da belirtilen) partiyi geri yukler."""
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return False, "Once tarama yapin"
+    try:
+        con = motor.db_connect(str(yol))
+        con.executescript(GERI_AL_SEMA)
+        if parti is None:
+            satir = con.execute("SELECT MAX(parti) FROM geri_al").fetchone()
+            parti = satir[0] if satir else None
+        if not parti:
+            con.close()
+            return False, "Geri alinacak islem yok"
+        kayitlar = list(con.execute(
+            "SELECT yuz, kume, aciklama FROM geri_al WHERE parti = ?", (parti,)))
+        if not kayitlar:
+            con.close()
+            return False, "Bu islem bulunamadi"
+        aciklama = kayitlar[0][2]
+        con.executemany("UPDATE faces SET cluster = ? WHERE id = ?",
+                        [(k, y) for y, k, _a in kayitlar])
+        isim = con.execute("SELECT icerik FROM geri_al_isim WHERE parti = ?",
+                           (parti,)).fetchone()
+        if isim and isim[0]:
+            (BASE / "isimler.csv").write_text(isim[0], encoding="utf-8-sig")
+        con.execute("DELETE FROM geri_al WHERE parti >= ?", (parti,))
+        con.execute("DELETE FROM geri_al_isim WHERE parti >= ?", (parti,))
+        con.commit()
+        con.close()
+        _RESIM_BELLEK.clear()
+        return True, "Geri alindi: %s (%d yuz)" % (aciklama, len(kayitlar))
+    except Exception as e:
+        return False, str(e)
+
+
+def veritabani_yedegi(etiket=""):
+    """
+    Riskli islem oncesi veritabaninin kopyasini alir.
+
+    Gerekce: 10.000 karelik tarama 5 saat suruyor. Dosya bozulursa ya da
+    yanlis bir yeniden gruplama yapilirsa bu emek gider; kutuphanenin
+    yedegi vardi ama taramanin yoktu.
+    """
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return None
+    try:
+        klasor = yol.parent / "yedek"
+        klasor.mkdir(exist_ok=True)
+        ad = "%s-%s%s.db" % (yol.stem, time.strftime("%Y%m%d-%H%M%S"),
+                             ("-" + etiket) if etiket else "")
+        hedef = klasor / ad
+        shutil.copy2(str(yol), str(hedef))
+        # son 5 yedegi tut
+        eskiler = sorted(klasor.glob(yol.stem + "-*.db"))
+        for e in eskiler[:-5]:
+            try:
+                e.unlink()
+            except OSError:
+                pass
+        return str(hedef)
+    except Exception:
+        return None
+
+
+def neden_bu_kisi(yuz_id):
+    """
+    Bir yuzun neden bu kisiye konuldugunu gosterir: kisinin merkezine
+    benzerligi, ayni kisiden en yakin ornekler ve BASKA kisilerden en yakin
+    ornek. Boylece kullanici karari denetleyebilir.
+    """
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return {}
+    con = motor.db_connect(str(yol))
+    satir = con.execute(
+        "SELECT id, path, x1, y1, x2, y2, emb, cluster, supheli, netlik "
+        "FROM faces WHERE id = ?", (int(yuz_id),)).fetchone()
+    if not satir:
+        con.close()
+        return {}
+    import numpy as _np
+    hedef_emb = _np.frombuffer(satir[6], _np.float32)
+    hedef_emb = hedef_emb / (_np.linalg.norm(hedef_emb) + 1e-9)
+    cid = satir[7]
+
+    isimler = motor.isim_csv_oku(BASE / "isimler.csv")
+
+    def ad(c):
+        return isimler.get(c) or ("kisi_%04d" % c)
+
+    hepsi = list(con.execute(
+        "SELECT id, path, x1, y1, x2, y2, emb, cluster FROM faces WHERE cluster > 0"))
+    con.close()
+    if not hepsi:
+        return {}
+    E = _np.vstack([_np.frombuffer(r[6], _np.float32) for r in hepsi])
+    E = E / (_np.linalg.norm(E, axis=1, keepdims=True) + 1e-9)
+    benzerlik = E @ hedef_emb
+
+    ayni, baska = [], []
+    for i, r in enumerate(hepsi):
+        if r[0] == satir[0]:
+            continue
+        (ayni if r[7] == cid else baska).append((float(benzerlik[i]), i))
+    ayni.sort(reverse=True)
+    baska.sort(reverse=True)
+
+    kendi = [i for i, r in enumerate(hepsi) if r[7] == cid]
+    merkez = E[kendi].mean(axis=0)
+    merkez /= _np.linalg.norm(merkez) + 1e-9
+
+    def kart(b, i):
+        r = hepsi[i]
+        return {"benzerlik": round(b, 3), "ad": os.path.basename(r[1]),
+                "kisi": ad(r[7]),
+                "resim": kucuk_resim((r[0], r[1], r[2], r[3], r[4], r[5], None, None), 96)}
+
+    return {
+        "yuz": int(satir[0]),
+        "kisi": ad(cid),
+        "dosya": os.path.basename(satir[1]),
+        "resim": kucuk_resim((satir[0], satir[1], satir[2], satir[3], satir[4],
+                              satir[5], satir[8], satir[9]), 132),
+        "merkeze": round(float(hedef_emb @ merkez), 3),
+        "supheli": satir[8] is not None,
+        "netlik": round(float(satir[9] or 0), 1),
+        "ayni": [kart(b, i) for b, i in ayni[:4]],
+        "baska": [kart(b, i) for b, i in baska[:3]],
+    }
+
+
 def rapor_verisi():
     """Rapor sayfasi icin ozet + birlikte gorunme."""
     yol = Path(db_yolu())
     if not yol.exists():
         return {}
     try:
-        con = sqlite3.connect(str(yol))
-        con.executescript(motor.DB_SCHEMA)
+        con = motor.db_connect(str(yol))
         isimler = motor.isim_csv_oku(BASE / "isimler.csv")
 
         def ad(cid):
@@ -451,6 +799,22 @@ def rapor_verisi():
                 key=lambda z: -z["oran"])[:8],
         }
 
+        # --- KAPSAMA / SAHNE / TOPLULUK / DIKEY
+        kapsama = kapsama_verisi(con, ad)
+        topluluk = topluluk_kareleri(kare_kisi, ad)
+        dikey = dikey_kapsama(con, kare_kisi, ad)
+        try:
+            kare_sahne, sahne_ozet = motor.sahne_bloklari(con)
+        except Exception:
+            kare_sahne, sahne_ozet = {}, []
+        for x in sahne_ozet:                      # her sahnede kimler var
+            kumeler = set()
+            for yolu, no in kare_sahne.items():
+                if no == x["no"]:
+                    kumeler |= kare_kisi.get(yolu, set())
+            x["kisi"] = len(kumeler)
+            x["kisiler"] = ", ".join(sorted(ad(c) for c in kumeler)[:6])
+
         # --- SUPHELI KARELER
         try:
             supheli_liste = [
@@ -476,7 +840,9 @@ def rapor_verisi():
         return {"kisiler": kisiler, "ikili": ikili, "dagilim": dagilim,
                 "isaretli": isaretli, "vetolu": vetolu,
                 "bolumler": bolumler, "capraz": capraz_tablo,
-                "karne": karne, "supheli": supheli_liste}
+                "karne": karne, "supheli": supheli_liste,
+                "kapsama": kapsama, "topluluk": topluluk, "dikey": dikey,
+                "sahneler": sahne_ozet}
     except Exception:
         return {}
 
@@ -497,8 +863,7 @@ def arama_yap(kumeler, herhangi=False, sinir=400):
     yol = Path(db_yolu())
     if not yol.exists() or not kumeler:
         return {"adet": 0, "yollar": [], "gruplar": []}
-    con = sqlite3.connect(str(yol))
-    con.executescript(motor.DB_SCHEMA)
+    con = motor.db_connect(str(yol))
     istenen = set(int(k) for k in kumeler)
     kk = _kare_kisi(con)
 
@@ -548,8 +913,7 @@ def kisiler_listesi(adet=5):
     yol = Path(db_yolu())
     if not yol.exists():
         return []
-    con = sqlite3.connect(str(yol))
-    con.executescript(motor.DB_SCHEMA)
+    con = motor.db_connect(str(yol))
     isimler = motor.isim_csv_oku(BASE / "isimler.csv")
     oner = {r[0]: (r[1], r[2], r[3]) for r in con.execute(
         "SELECT cluster, onerilen, puan, sayfalar FROM oneriler")}
@@ -589,8 +953,7 @@ def kisiler_listesi(adet=5):
 
 def isim_kaydet(kume, isim):
     yol = BASE / "isimler.csv"
-    con = sqlite3.connect(db_yolu())
-    con.executescript(motor.DB_SCHEMA)
+    con = motor.db_connect(db_yolu())
     motor.isim_csv_yaz(con, yol)          # eksik satirlari tamamla
     mevcut = motor.isim_csv_oku(yol)
     mevcut[int(kume)] = (isim or "").strip()
@@ -668,6 +1031,18 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json(d)
         if u.path == "/api/kisiler":
             return self._json({"kisiler": kisiler_listesi()})
+        if u.path == "/api/neden":
+            yuz = q.get("yuz", [""])[0]
+            if not yuz:
+                return self._json({})
+            try:
+                return self._json(neden_bu_kisi(int(yuz)))
+            except Exception as e:
+                return self._json({"hata": str(e)}, 400)
+
+        if u.path == "/api/geri-al-liste":
+            return self._json({"islemler": geri_al_listesi()})
+
         if u.path == "/api/son-kare":
             with kilit:
                 yolu = durum.get("son_kare") or ""
@@ -687,8 +1062,7 @@ class Vekil(BaseHTTPRequestHandler):
             yol = Path(db_yolu())
             if not yol.exists() or not kume:
                 return self._json({"kareler": []})
-            con = sqlite3.connect(str(yol))
-            con.executescript(motor.DB_SCHEMA)
+            con = motor.db_connect(str(yol))
             try:
                 satirlar = con.execute(
                     "SELECT path, supheli FROM faces WHERE cluster=? AND supheli IS NOT NULL "
@@ -699,6 +1073,19 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json({"kareler": [
                 {"ad": os.path.basename(p), "klasor": os.path.dirname(p),
                  "benzerlik": round(float(b or 0), 3)} for p, b in satirlar]})
+
+        if u.path == "/api/benzer-kisiler":
+            kut = BASE / "kisi_kutuphanesi.db"
+            if not kut.exists():
+                return self._json({"oneriler": []})
+            try:
+                import kutuphane
+                c = kutuphane.ac(kut)
+                oneriler = kutuphane.benzer_kisiler(c)
+                c.close()
+                return self._json({"oneriler": oneriler})
+            except Exception as e:
+                return self._json({"oneriler": [], "hata": str(e)})
 
         if u.path == "/api/kutuphane":
             return self._json({"kisiler": kutuphane_listesi()})
@@ -785,7 +1172,8 @@ class Vekil(BaseHTTPRequestHandler):
 
         if u.path == "/api/ayar":
             for k in ("eps", "min_samples", "mod", "duzen", "derinlik", "etiket_mod",
-                      "secki_atla", "hizli_tarama", "kaliteli_tarama", "tema"):
+                      "secki_atla", "hizli_tarama", "kaliteli_tarama", "iki_asama",
+                    "tema"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -824,8 +1212,7 @@ class Vekil(BaseHTTPRequestHandler):
                 elif bicim.startswith("csv"):
                     import csv as _csv
                     import io as _io
-                    con = sqlite3.connect(db_yolu())
-                    con.executescript(motor.DB_SCHEMA)
+                    con = motor.db_connect(db_yolu())
                     isimler = motor.isim_csv_oku(BASE / "isimler.csv")
                     kk = _kare_kisi(con)
                     try:
@@ -913,6 +1300,32 @@ class Vekil(BaseHTTPRequestHandler):
                 basliklar = ["kisi", "kisi", "birlikte_kare"]
                 satirlar = [[i["a"], i["b"], i["adet"]] for i in d.get("ikili", [])]
                 varsayilan = "birlikte-gorunenler"
+            elif tur == "kapsama":
+                basliklar = ["kisi", "toplam_kare", "kullanilabilir", "yeterli_mi",
+                             "bulanik", "kucuk_yuz", "goz_kapali"]
+                satirlar = [[x["ad"], x["kare"], x["kullanilabilir"],
+                             "AZ" if x["yetersiz"] else "yeterli",
+                             x["bulanik"], x["kucuk"], x["goz"]]
+                            for x in d.get("kapsama", [])]
+                varsayilan = "kapsama-raporu"
+            elif tur == "sahne":
+                basliklar = ["sahne", "baslangic", "bitis", "dakika", "kare",
+                             "kisi", "kimler", "klasor"]
+                satirlar = [[x["no"], x["bas"], x["son"], x["dakika"], x["kare"],
+                             x.get("kisi", 0), x.get("kisiler", ""), x.get("klasor", "")]
+                            for x in d.get("sahneler", [])]
+                varsayilan = "sahne-listesi"
+            elif tur == "topluluk":
+                basliklar = ["dosya", "kisi_sayisi", "kimler", "klasor"]
+                satirlar = [[x["ad"], x["kisi_sayisi"], x["kisiler"], x["klasor"]]
+                            for x in d.get("topluluk", [])]
+                varsayilan = "topluluk-kareleri"
+            elif tur == "dikey":
+                basliklar = ["kisi", "yatay", "dikey", "durum"]
+                satirlar = [[x["ad"], x["yatay"], x["dikey"],
+                             "DIKEY YOK" if x["yok"] else "var"]
+                            for x in d.get("dikey", [])]
+                varsayilan = "dikey-kapsama"
             elif tur == "karne":
                 k = d.get("karne", {})
                 basliklar = ["olcum", "deger"]
@@ -1010,13 +1423,26 @@ class Vekil(BaseHTTPRequestHandler):
             islem = veri.get("islem")
             db = cfg["db"]
             isimler = str(BASE / "isimler.csv")
+            if islem == "geri-al":
+                ok, mesaj = geri_al_uygula(veri.get("parti"))
+                return self._json({"ok": ok, "mesaj": mesaj} if ok else {"hata": mesaj},
+                                  200 if ok else 400)
+            if islem == "yedekle":
+                yolu = veritabani_yedegi("elle")
+                return self._json({"ok": bool(yolu), "yol": yolu or "",
+                                   "mesaj": ("Yedek alindi: %s" % os.path.basename(yolu))
+                                   if yolu else "Yedek alinamadi"})
             if islem == "birlestir":
                 kumeler = [str(k) for k in (veri.get("kume") or [])]
                 if len(kumeler) < 2:
                     return self._json({"hata": "En az iki kisi secin"}, 400)
+                geri_al_kaydet("%d kisi birlestirildi" % len(kumeler),
+                               kumeler=[int(k) for k in kumeler])
                 return self._json({"ok": is_calistir("Kisiler birlestiriliyor", [
                     "birlestir", "--db", db, "--names", isimler, "--kume"] + kumeler)})
             if islem == "bol":
+                geri_al_kaydet("kisi_%04d bolundu" % int(veri.get("kume") or 0),
+                               kumeler=[int(veri.get("kume") or 0)])
                 return self._json({"ok": is_calistir("Kisi bolunuyor", [
                     "bol", "--db", db, "--names", isimler,
                     "--kume", str(veri.get("kume")),
@@ -1025,6 +1451,8 @@ class Vekil(BaseHTTPRequestHandler):
                 yuzler = [str(y) for y in (veri.get("yuz") or [])]
                 if not yuzler:
                     return self._json({"hata": "Yuz secilmedi"}, 400)
+                geri_al_kaydet("%d yuz gruptan cikarildi" % len(yuzler),
+                               yuz_idler=[int(y) for y in yuzler])
                 return self._json({"ok": is_calistir("Yuz cikariliyor", [
                     "cikar", "--db", db, "--names", isimler, "--yuz"] + yuzler)})
             return self._json({"hata": "bilinmeyen islem"}, 400)
@@ -1052,12 +1480,17 @@ class Vekil(BaseHTTPRequestHandler):
                 a = ["scan", "--src"] + kaynaklar + ["--db", db]
                 if cfg.get("kaliteli_tarama"):
                     a += ["--kalite"]
+                elif cfg.get("iki_asama"):
+                    a += ["--iki-asama"]
                 elif cfg.get("hizli_tarama"):
                     a += ["--hizli"]
                 if veri.get("deneme"):
                     a += ["--limit", "300"]
                 return self._json({"ok": is_calistir("Fotograflar taraniyor", a)})
             if adim == "grupla":
+                # Yeniden gruplama tum kume numaralarini degistirir; once yedek
+                # al ki yanlis esikle calistirildiginda geri donulebilsin.
+                veritabani_yedegi("gruplama-oncesi")
                 return self._json({"ok": is_calistir("Kisiler gruplaniyor", [
                     "cluster", "--db", db, "--eps", cfg["eps"],
                     "--min-samples", cfg["min_samples"]])})

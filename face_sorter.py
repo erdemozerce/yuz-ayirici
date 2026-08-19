@@ -19,12 +19,13 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.20.1"
+__version__ = "1.20.2"
 
 import argparse
 import base64
 import csv
 import json
+import datetime
 import os
 import re
 import shutil
@@ -63,7 +64,9 @@ CREATE TABLE IF NOT EXISTS files(
     kok     TEXT,
     esler   TEXT,
     imza    TEXT,
-    zaman   TEXT
+    zaman   TEXT,
+    en      INTEGER,
+    boy     INTEGER
 );
 CREATE TABLE IF NOT EXISTS faces(
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,7 +115,8 @@ def db_connect(path):
     if "esler" not in sutunlar:
         con.execute("ALTER TABLE files ADD COLUMN esler TEXT")
         con.commit()
-    for ad, tur in (("imza", "TEXT"), ("zaman", "TEXT")):
+    for ad, tur in (("imza", "TEXT"), ("zaman", "TEXT"),
+                    ("en", "INTEGER"), ("boy", "INTEGER")):
         if ad not in sutunlar:
             con.execute("ALTER TABLE files ADD COLUMN %s %s" % (ad, tur))
     yuz_sutun = {r[1] for r in con.execute("PRAGMA table_info(faces)")}
@@ -138,15 +142,33 @@ def db_connect(path):
     return con
 
 
-def _jpeg_uzun_kenar(data):
-    """Dosyayi cozmeden uzun kenari okur (JPEG/PNG basligi)."""
+# EXIF Orientation notu: OpenCV (5.0.0 ile dogrulandi) etiketi imdecode
+# sirasinda ZATEN uyguluyor - IMREAD_COLOR ve REDUCED_2/4/8 yollarinin
+# hepsinde. Bu yuzden burada ek bir donus YAPMIYORUZ; yapsaydik kareyi
+# ikinci kez cevirip yan yatirirdik. (Yan yatmis karede yuz tespiti
+# %54-60 dusuyor, olculdu - yani ikinci donus pahaliya mal olurdu.)
+# PIL yedek yolu farkli: orada etiket elle uygulanmali, asagida yapiliyor.
+
+
+def _baslik_bilgisi(data):
+    """Dosyayi cozmeden (uzun_kenar, yon) dondurur. yon = EXIF Orientation."""
     try:
         import io as _io
         from PIL import Image
-        with Image.open(_io.BytesIO(data.tobytes() if hasattr(data, "tobytes") else data)) as im:
-            return max(im.size)
+        ham = data.tobytes() if hasattr(data, "tobytes") else data
+        with Image.open(_io.BytesIO(ham)) as im:
+            try:
+                yon = int((im.getexif() or {}).get(274, 1))
+            except Exception:
+                yon = 1
+            return max(im.size), yon
     except Exception:
-        return 0
+        return 0, 1
+
+
+def _jpeg_uzun_kenar(data):
+    """Dosyayi cozmeden uzun kenari okur (JPEG/PNG basligi)."""
+    return _baslik_bilgisi(data)[0]
 
 
 def raw_oku(path, en_az=800):
@@ -191,11 +213,11 @@ def imread_unicode(path, kucult=0):
         return (img, 1.0) if kucult else img
     try:
         data = np.fromfile(str(path), dtype=np.uint8)
+        en_uzun = _baslik_bilgisi(data)[0]
         if kucult:
             # Basliktan boyutu okuyup TEK seferde dogru olcekte cozuyoruz.
             # Onceden once /2 sonra /4 cozuluyordu; ayni dosya iki kez
             # cozuldugu icin okuma suresi %60 fazlaydi (10.2 sn -> 6.5 sn).
-            en_uzun = _jpeg_uzun_kenar(data)
             bayrak, olcek = cv2.IMREAD_COLOR, 1.0
             if en_uzun:
                 for b, o in ((cv2.IMREAD_REDUCED_COLOR_8, 0.125),
@@ -223,6 +245,11 @@ def imread_unicode(path, kucult=0):
         except Exception:
             pass
         with Image.open(str(path)) as im:
+            try:                       # PIL kendi cevirsin, etiketi biz uygulamayalim
+                from PIL import ImageOps
+                im = ImageOps.exif_transpose(im)
+            except Exception:
+                pass
             im = im.convert("RGB")
             sonuc = cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
             return (sonuc, 1.0) if kucult else sonuc
@@ -273,6 +300,59 @@ def bagil_klasor(yol, kok, derinlik=0):
     if derinlik and len(bagil.parts) > derinlik:
         bagil = Path(*bagil.parts[:derinlik])
     return bagil
+
+
+def sahne_bloklari(con, bosluk_dk=20):
+    """
+    Kareleri cekim saatine gore sahnelere ayirir.
+
+    Sette bir sahne pes pese cekilir, sahneler arasinda kurulum molasi olur.
+    Ardisik iki kare arasinda `bosluk_dk` dakikadan uzun bir bosluk varsa
+    yeni sahne baslamis sayilir. Cekim saati EXIF'ten zaten kaydediliyor.
+
+    Dondurur: {kare_yolu: sahne_no} ve [{no, bas, son, kare, klasor}, ...]
+    """
+    satirlar = [(p, z) for p, z in con.execute(
+        "SELECT path, zaman FROM files WHERE zaman IS NOT NULL AND zaman != ''")]
+    if not satirlar:
+        return {}, []
+
+    def coz(z):
+        # EXIF bicimi: "2026:02:09 18:42:11"
+        for kalip in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.datetime.strptime(z[:19], kalip)
+            except (ValueError, TypeError):
+                continue
+        return None
+
+    kayit = [(p, coz(z)) for p, z in satirlar]
+    kayit = sorted(((p, t) for p, t in kayit if t is not None), key=lambda x: x[1])
+    if not kayit:
+        return {}, []
+
+    esik = datetime.timedelta(minutes=bosluk_dk)
+    kare_sahne, sahneler = {}, []
+    no, bas, onceki = 1, kayit[0][1], kayit[0][1]
+    icerik = []
+    for p, t in kayit:
+        if t - onceki > esik:
+            sahneler.append({"no": no, "bas": bas, "son": onceki, "kareler": icerik})
+            no += 1
+            bas, icerik = t, []
+        kare_sahne[p] = no
+        icerik.append(p)
+        onceki = t
+    sahneler.append({"no": no, "bas": bas, "son": onceki, "kareler": icerik})
+
+    ozet = [{"no": x["no"],
+             "bas": x["bas"].strftime("%d.%m %H:%M"),
+             "son": x["son"].strftime("%H:%M"),
+             "dakika": max(1, int((x["son"] - x["bas"]).total_seconds() // 60)),
+             "kare": len(x["kareler"]),
+             "klasor": os.path.dirname(x["kareler"][0]) if x["kareler"] else ""}
+            for x in sahneler]
+    return kare_sahne, ozet
 
 
 def fmt_eta(seconds):
@@ -404,12 +484,16 @@ def _isci_isle(gorev):
     app = _ISCI["app"]
     max_side = _ISCI["max_side"]
     status, rows, imza = "ok", [], None
+    tam_en = tam_boy = None
     try:
         img, oku_olcek = imread_unicode(path, kucult=max_side)
         if img is None:
             return {"path": path, "mtime": mtime, "size": size, "kok": kok,
-                    "esler": esler, "status": "okunamadi", "rows": [], "imza": None}
+                    "esler": esler, "status": "okunamadi", "rows": [], "imza": None,
+                    "en": None, "boy": None}
         h, w = img.shape[:2]
+        # gercek (donme uygulanmis) olculer - dikey kare kapsamasi icin
+        tam_en, tam_boy = int(round(w / oku_olcek)), int(round(h / oku_olcek))
         olcek = oku_olcek
         if max(h, w) > max_side:
             o = max_side / max(h, w)
@@ -429,7 +513,8 @@ def _isci_isle(gorev):
     except Exception as e:
         status = "hata: %s" % type(e).__name__
     return {"path": path, "mtime": mtime, "size": size, "kok": kok, "esler": esler,
-            "status": status, "rows": rows, "imza": imza}
+            "status": status, "rows": rows, "imza": imza,
+            "en": tam_en, "boy": tam_boy}
 
 
 # --------------------------------------------------------------------------
@@ -462,6 +547,12 @@ def cmd_scan(args):
           f"{' (%d klasorden)' % len(kaynaklar) if len(kaynaklar) > 1 else ''}.")
 
     done = {r[0]: (r[1], r[2]) for r in con.execute("SELECT path, mtime, size FROM files")}
+    ic_liste = getattr(args, "dosya_listesi_ic", None)
+    if ic_liste:
+        ic_kume = set(ic_liste)
+        files = [t for t in files if str(t[0]) in ic_kume]
+        print("  Ikinci asama: %d kare yeniden taranacak." % len(files))
+
     todo = []
     es_sayisi = sum(len(e) for _, _, e in files)
     if es_sayisi:
@@ -497,11 +588,12 @@ def cmd_scan(args):
                 "netlik,goz,yaw,pitch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", sonuc["rows"])
         con.execute(
             "INSERT OR REPLACE INTO files(path,mtime,size,n_faces,status,kok,esler,"
-            "imza,zaman) VALUES(?,?,?,?,?,?,?,?,?)",
+            "imza,zaman,en,boy) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (sonuc["path"], sonuc["mtime"], sonuc["size"], len(sonuc["rows"]),
              sonuc["status"], sonuc["kok"],
              "|".join(sonuc["esler"]) if sonuc["esler"] else None,
-             sonuc["imza"], cekim_zamani(sonuc["path"])))
+             sonuc["imza"], cekim_zamani(sonuc["path"]),
+             sonuc.get("en"), sonuc.get("boy")))
         return sayac + len(sonuc["rows"])
 
     t0 = time.time()
@@ -537,6 +629,33 @@ def cmd_scan(args):
 
     con.commit()
     print(f"Bitti. Toplam {n_faces_total} yuz kaydedildi -> {args.db}")
+
+    # ---------------------------------------------------------------- 2. asama
+    if getattr(args, "iki_asama", False) and not getattr(args, "kalite", False):
+        yuzlu = [r[0] for r in con.execute(
+            "SELECT path FROM files WHERE n_faces > 0 AND status = 'ok'")]
+        yuzsuz = con.execute(
+            "SELECT COUNT(*) FROM files WHERE n_faces = 0 AND status = 'ok'"
+        ).fetchone()[0]
+        if not yuzlu:
+            print("Ikinci asama atlandi: yuz bulunan kare yok.")
+            return
+        print()
+        print("2. ASAMA - yuksek kalite (%d kare). %d insansiz kare atlaniyor."
+              % (len(yuzlu), yuzsuz))
+        soru = ",".join("?" * len(yuzlu))
+        con.execute("DELETE FROM faces WHERE path IN (%s)" % soru, yuzlu)
+        # files satiri da silinmeli: yoksa ikinci gecis bu kareleri
+        # "zaten islenmis" sayip atlar.
+        con.execute("DELETE FROM files WHERE path IN (%s)" % soru, yuzlu)
+        con.commit()
+        con.close()
+        args.kalite = True
+        args.iki_asama = False
+        args.det_size, args.max_side = 800, 2560
+        args.dosya_listesi_ic = yuzlu          # cmd_scan bunu gorup sadece bunlari isler
+        cmd_scan(args)
+        return
 
 
 # --------------------------------------------------------------------------
@@ -1634,16 +1753,6 @@ def cmd_teslim(args):
     except Exception:
         pass
 
-    dosya_suzgeci = None
-    if getattr(args, "dosya_listesi", ""):
-        try:
-            dosya_suzgeci = {x.strip() for x in
-                             Path(args.dosya_listesi).read_text(encoding="utf-8").splitlines()
-                             if x.strip()}
-            print("Dosya listesi: %d kare." % len(dosya_suzgeci))
-        except OSError:
-            pass
-
     kayitlar = {}
     for cid, yol in con.execute(
             "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
@@ -1697,6 +1806,20 @@ def cmd_teslim(args):
 
 def cmd_export(args):
     con = db_connect(args.db)
+
+    # Arama sonucundan klasorleme: yalnizca bu listedeki kareler yazilir.
+    # (1.19.0-1.20.1'de bu tanim yanlislikla cmd_teslim'e konmustu ve
+    #  cmd_export NameError ile cokuyordu.)
+    dosya_suzgeci = None
+    if getattr(args, "dosya_listesi", ""):
+        try:
+            dosya_suzgeci = {x.strip() for x in
+                             Path(args.dosya_listesi).read_text(encoding="utf-8").splitlines()
+                             if x.strip()}
+            print("Dosya listesi: %d kare ile sinirlandirildi." % len(dosya_suzgeci))
+        except OSError:
+            print("Dosya listesi okunamadi: %s" % args.dosya_listesi)
+
     names = {}
     if args.names and Path(args.names).exists():
         with open(args.names, newline="", encoding="utf-8-sig") as fh:
@@ -1980,12 +2103,18 @@ def main():
     s.add_argument("--isci", type=int, default=0,
                    help="es zamanli surec sayisi (0 = tek surec). Olculdu: CPU'da "
                         "coklu surec yavaslatiyor, ONNX zaten tum cekirdekleri kullaniyor.")
+    s.add_argument("--iki-asama", action="store_true",
+                   help="once normal cozunurlukte tara, yuksek kaliteyi yalnizca "
+                        "yuz bulunan karelere uygula. Insansiz kareler (set "
+                        "detayi, klaket) pahali gecisi gormez. DIKKAT: yalnizca "
+                        "kucuk yuz iceren bir kare birinci gecise takilmazsa "
+                        "yuksek kaliteye hic girmez.")
     s.add_argument("--kalite", action="store_true",
                    help="yuksek kalite taramasi: 2560 px / dedektor 800. Kucuk ve "
                         "uzaktaki yuzleri de yakalar; olculdu: kacan karelerin "
                         "yarisini kurtardi, hiz farki yok.")
     s.add_argument("--hizli", action="store_true",
-                   help="hizli tarama: dedektor 512 (olculdu %36 hizli). "
+                   help="hizli tarama: dedektor 512 (olculdu %%36 hizli). "
                         "Kalabaligin arkasindaki KUCUK yuzleri kacirabilir.")
     s.set_defaults(func=cmd_scan)
 
@@ -2040,7 +2169,7 @@ def main():
     sk = sub.add_parser("secki", help="bulanik / gozu kapali / tekrar kareleri isaretle")
     sk.add_argument("--db", default="faces.db")
     sk.add_argument("--netlik", type=float, default=0,
-                    help="netlik esigi (0 = otomatik, en dusuk %15)")
+                    help="netlik esigi (0 = otomatik, en dusuk %%15)")
     sk.add_argument("--goz", type=float, default=0,
                     help="mutlak goz esigi (0 = kisiye gore otomatik)")
     sk.add_argument("--goz-orani", type=float, default=0.72,

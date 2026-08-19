@@ -138,6 +138,17 @@
   .canli .yazi b{color:var(--yazi);display:block;font-size:13px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+  /* ---- kapsama uyarisi ---- */
+  .uyarili-satir{background:rgba(245,185,66,.10)}
+  .rozetcik{display:inline-block;font-size:10.5px;font-weight:700;border-radius:5px;
+    padding:1px 6px;margin-left:6px}
+  .rozetcik.eksik{background:var(--sari);color:#3a2a00}
+  .rozetcik.tamam{background:var(--yesil);color:#06281c}
+  /* ---- neden penceresi ---- */
+  .neden-satir{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .neden-satir img{width:64px;height:64px;border-radius:7px;border:1px solid var(--cizgi)}
+  .neden-kutu{display:flex;flex-direction:column;align-items:center;gap:3px;
+    font-size:10.5px;color:var(--soluk);width:64px;text-align:center}
   /* ---- rapor ---- */
   .rapor-basi{display:flex;align-items:center;gap:10px;justify-content:space-between}
   .rapor-basi .kaydet{font-size:12px;padding:5px 11px}
@@ -467,6 +478,17 @@
     </label>
     <label style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:13.5px;
                   color:var(--soluk);cursor:pointer">
+      <input type="checkbox" id="iki-asama" onchange="ikiAsamaDegisti()"
+             style="accent-color:var(--vurgu);width:15px;height:15px;margin-top:3px">
+      <span><b style="color:var(--yazi)">İki aşamalı tarama</b> — önce normal
+      çözünürlükte tarar, yüksek kaliteyi yalnızca yüz bulunan karelere uygular.
+      Set detayı, klaket ve boş oda kareleri pahalı geçişi görmez.
+      <b style="color:var(--sari)">Dikkat:</b> yalnızca küçük yüz içeren bir kare
+      ilk geçişte hiç yüz vermezse yüksek kaliteye girmez. Test arşivinde iki
+      yöntem aynı sonucu verdi, ama en yüksek doğruluk için kapalı bırak.</span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:13.5px;
+                  color:var(--soluk);cursor:pointer">
       <input type="checkbox" id="hizli" onchange="hizliDegisti()"
              style="accent-color:var(--vurgu);width:15px;height:15px;margin-top:3px">
       <span><b style="color:var(--yazi)">Hızlı tarama</b> — üçte bir daha hızlı bitirir,
@@ -522,6 +544,8 @@
     </div>
     <div class="dugmeler">
       <button onclick="kisileriYukle()">Yenile</button>
+      <button onclick="geriAl()" title="Son birleştirme/bölme/çıkarma işlemini geri al">
+        ↶ Geri al</button>
       <button onclick="baslat('ogren')">İsimleri kütüphaneye öğret</button>
     </div>
     <div class="ipucu">
@@ -582,7 +606,7 @@
   <div class="kart">
     <h2 data-adim="👤">Kişi kütüphanesi <span id="kut-sayi"></span></h2>
     <div class="ipucu" style="border-top:0;padding-top:0;margin-top:0;margin-bottom:16px">
-      Burada program"un tanıdığı kişiler durur. Bir kişiye isim verip onayladığında
+      Burada programın tanıdığı kişiler durur. Bir kişiye isim verip onayladığında
       buraya kaydedilir; sonraki bölümlerde o kişiyi kendisi tanır.
       Bu liste <b>fotoğraf içermez</b>, yalnızca yüzlerden çıkarılan sayıları ve
       küçük bir kapak resmini tutar.
@@ -605,6 +629,8 @@
       <div class="etiket">Toplanacak isim</div>
       <select id="kut-hedef" style="flex:1"></select>
       <button class="ana" onclick="kutBirlestir()">Birleştir</button>
+      <button onclick="benzerleriBul()" title="Aynı oyuncu iki isimle kayıtlı olabilir">
+        Benzer kişileri bul</button>
     </div>
   </div>
 </section>
@@ -662,6 +688,56 @@
       <b>Yüksek kalite taraması</b> ile yeniden taramak işe yarar.
       Şüpheli yüzler kişiye alınmış ama tam oturmamış eşleşmelerdir —
       Çalışma sayfasında turuncu çerçeveyle görünürler.
+    </div>
+  </div>
+
+  <div class="kart">
+    <div class="rapor-basi">
+      <h2 data-adim="🎯" style="margin:0">Kimden yeterince kare yok?</h2>
+      <button class="kaydet" onclick="raporKaydet('kapsama')">Dosyaya kaydet</button>
+    </div>
+    <div id="rapor-kapsama" style="margin-top:12px"></div>
+    <div class="rapor-not">
+      <b style="color:var(--yazi)">Kullanılabilir kare</b> = net (bulanık değil),
+      gözü açık ve yüzü yeterince büyük kare. Toplam kare sayısı yanıltıcıdır —
+      40 karenin hepsi bulanık olabilir. Sayısı 5'in altında olanlar
+      <span class="rozetcik eksik">az</span> ile işaretli; set dağılmadan
+      o oyuncudan kare çekmek gerekir.
+    </div>
+  </div>
+
+  <div class="kart">
+    <div class="rapor-basi">
+      <h2 data-adim="🎞️" style="margin:0">Sahneler <span id="sahne-sayi"
+          style="font-size:13px;color:var(--soluk);font-weight:400"></span></h2>
+      <button class="kaydet" onclick="raporKaydet('sahne')">Dosyaya kaydet</button>
+    </div>
+    <div id="rapor-sahne" style="margin-top:12px"></div>
+    <div class="rapor-not">
+      Sahneler çekim saatinden bulunur: ardışık iki kare arasında 20 dakikadan
+      uzun boşluk varsa yeni sahne sayılır. İsim yazma işlemi bu numarayı
+      fotoğrafın altyazısına da koyabilir.
+    </div>
+  </div>
+
+  <div class="kart">
+    <div class="rapor-basi">
+      <h2 data-adim="👥" style="margin:0">Topluluk kareleri</h2>
+      <button class="kaydet" onclick="raporKaydet('topluluk')">Dosyaya kaydet</button>
+    </div>
+    <div id="rapor-topluluk" style="margin-top:12px"></div>
+    <div class="rapor-not">En çok oyuncunun bir arada olduğu kareler — tanıtım ve afiş için.</div>
+  </div>
+
+  <div class="kart">
+    <div class="rapor-basi">
+      <h2 data-adim="📱" style="margin:0">Dikey kare kapsaması</h2>
+      <button class="kaydet" onclick="raporKaydet('dikey')">Dosyaya kaydet</button>
+    </div>
+    <div id="rapor-dikey" style="margin-top:12px"></div>
+    <div class="rapor-not">
+      Sosyal medya dikey kare istiyor ve yatay kareden dikey üretilemiyor.
+      Hiç dikey karesi olmayan oyuncular işaretli.
     </div>
   </div>
 
@@ -736,7 +812,7 @@
 <script>
 const T = new URLSearchParams(location.search).get("t") || "";
 const $ = s => document.querySelector(s);
-let calisiyor = false, sonBitti = "";
+let calisiyor = false, sonBitti = "", sonHata = "";
 
 async function al(yol){
   // Adreste zaten ? varsa & ile ekle - yoksa sunucu tokeni goremez ve 403 doner.
@@ -810,6 +886,9 @@ async function durdur(){ await post("/api/durdur"); }
 async function kaynakSil(sira){ await post("/api/klasor", {tip:"kaynak_sil", sira}); durumGuncelle(); }
 async function duzenDegistir(){ await post("/api/ayar", {duzen: $("#duzen").value}); }
 async function hizliDegisti(){ await post("/api/ayar", {hizli_tarama: $("#hizli").checked}); }
+async function ikiAsamaDegisti(){
+  await post("/api/ayar", {iki_asama: $("#iki-asama").checked});
+}
 async function kaliteDegisti(){
   await post("/api/ayar", {kaliteli_tarama: $("#kaliteli").checked});
   durumGuncelle();
@@ -894,6 +973,11 @@ async function durumGuncelle(){
   $("#etiket-mod").value = d.ayar.etiket_mod || "gomulu";
   $("#hizli").checked = !!d.ayar.hizli_tarama;
   if (d.ayar.tema && d.ayar.tema !== temaSecim) temaUygula(d.ayar.tema);
+  const ia = $("#iki-asama");
+  if (ia){
+    ia.checked = !!d.ayar.iki_asama;
+    ia.disabled = !!d.ayar.kaliteli_tarama;
+  }
   const kal = $("#kaliteli");
   if (kal){
     kal.checked = !!d.ayar.kaliteli_tarama;
@@ -936,7 +1020,13 @@ async function durumGuncelle(){
   }
   $("#gunluk").textContent = (d.satirlar||[]).join("\n");
   canliGuncelle(calisiyor, d.son_kare);
-  if(d.hata) uyar(d.hata);
+  // Durum 1.2 sn'de bir okunuyor; ayni hatayi her okumada gostermek
+  // ekrani ayni uyaridan onlarcasiyla dolduruyordu. Sadece degisince goster.
+  if(d.hata){
+    if(d.hata !== sonHata){ sonHata = d.hata; uyar(d.hata); }
+  } else {
+    sonHata = "";
+  }
 
   if(d.bitti && d.bitti !== sonBitti){
     sonBitti = d.bitti;
@@ -1130,7 +1220,9 @@ async function kutuphaneYukle(){
     const ad = k.isim.replace(/"/g, "&quot;");
     return '<div class="kutkart" data-isim="' + ad + '">' + g +
       '<div class="bilgi"><div class="ad">' + k.isim + "</div>" +
-      '<div class="alt">' + k.ornek + " örnek · " + (k.guncelleme || k.eklenme || "") + "</div>" +
+      '<div class="alt">' + k.ornek + " örnek" +
+        ((k.gorunum || 1) > 1 ? " · " + k.gorunum + " görünüm" : "") +
+        " · " + (k.guncelleme || k.eklenme || "") + "</div>" +
       '<div class="islem">' +
         '<button onclick="kutSec(this)">seç</button>' +
         '<button onclick="kutAdlandir(this)">yeniden adlandır</button>' +
@@ -1145,6 +1237,24 @@ function kutSec(dugme){
   if (kutSecili.has(isim)) { kutSecili.delete(isim); kart.classList.remove("secili"); }
   else { kutSecili.add(isim); kart.classList.add("secili"); }
   kutBirlestirGuncelle();
+}
+
+/* Ayni oyuncu farkli dizilerde farkli yazilmis olabilir (or. "Dogan Umit" /
+   "Dogan Umit Karaca"). Kutuphanedeki yuzleri karsilastirip aday ciftleri
+   gosteriyoruz; birlestirme karari kullanicinin. */
+async function benzerleriBul(){
+  const d = await al("/api/benzer-kisiler");
+  const liste = d.oneriler || [];
+  if (!liste.length)
+    return bildir("Birbirine çok benzeyen kişi bulunamadı.", "basarili", 3000);
+  const satirlar = liste.map(function(o){
+    return o.a + "  ~  " + o.b + "   (benzerlik " + o.benzerlik + ")";
+  });
+  satirlar.push("", "Bunlar aynı kişi olabilir. Emin olduklarını kütüphanede",
+                "işaretleyip Birleştir düğmesiyle tek isimde toplayabilirsin.");
+  ileti({baslik: "Aynı kişi olabilir — " + liste.length + " çift",
+         tur: "uyari", genis: true, cikti: satirlar.join("\n"),
+         dugmeler: [{yazi:"Tamam", ana:true, deger:true}]});
 }
 function kutBirlestirGuncelle(){
   const kart = document.getElementById("kut-birlestir-kart");
@@ -1235,6 +1345,38 @@ async function raporYukle(){
           k.zayif.filter(z => z.oran > 0).map(z => [z.bolum, z.kare, z.yuzsuz, "%" + z.oran]))
       : "";
 
+  /* KAPSAMA */
+  const kap = d.kapsama || [];
+  document.getElementById("rapor-kapsama").innerHTML = kap.length
+    ? raporSatir(["Kişi", "Toplam kare", "Kullanılabilir", "Bulanık", "Küçük yüz", "Göz kapalı"],
+        kap.map(k => [k.ad + (k.yetersiz ? ' <span class="rozetcik eksik">az</span>'
+                                         : ' <span class="rozetcik tamam">yeterli</span>'),
+                      k.kare, k.kullanilabilir, k.bulanik, k.kucuk, k.goz]))
+    : '<div class="bos-durum">Önce tarama ve gruplama yap.</div>';
+
+  /* SAHNELER */
+  const sh = d.sahneler || [];
+  document.getElementById("sahne-sayi").textContent = sh.length ? "· " + sh.length + " sahne" : "";
+  document.getElementById("rapor-sahne").innerHTML = sh.length
+    ? raporSatir(["Sahne", "Başlangıç", "Bitiş", "Dakika", "Kare", "Kişi", "Kimler"],
+        sh.map(x => [x.no, x.bas, x.son, x.dakika, x.kare, x.kisi || 0, x.kisiler || ""]))
+    : '<div class="bos-durum">Çekim saati bilgisi olan kare yok.</div>';
+
+  /* TOPLULUK */
+  const tp = d.topluluk || [];
+  document.getElementById("rapor-topluluk").innerHTML = tp.length
+    ? raporSatir(["Dosya", "Kişi sayısı", "Kimler", "Klasör"],
+        tp.map(x => [x.ad, x.kisi_sayisi, x.kisiler, x.klasor]))
+    : '<div class="bos-durum">Birden fazla kişinin birlikte olduğu kare yok.</div>';
+
+  /* DIKEY */
+  const dk = d.dikey || [];
+  document.getElementById("rapor-dikey").innerHTML = dk.length
+    ? raporSatir(["Kişi", "Yatay", "Dikey"],
+        dk.map(x => [x.ad + (x.yok ? ' <span class="rozetcik eksik">dikey yok</span>' : ""),
+                     x.yatay, x.dikey]))
+    : '<div class="bos-durum">Kare ölçüsü bilgisi yok.</div>';
+
   /* R1 — bolum ozeti */
   document.getElementById("rapor-bolum").innerHTML = raporSatir(
     ["Bölüm", "Kare", "Kişi", "Yüz yok", "En çok görünenler"],
@@ -1273,10 +1415,14 @@ async function raporYukle(){
 
 const RAPOR_ADI = {karne:"Tarama karnesi", bolum:"Bölüm özeti",
                    capraz:"Kişi × bölüm tablosu", supheli:"Kontrol edilecek kareler",
-                   ikili:"Birlikte görünenler"};
+                   ikili:"Birlikte görünenler", kapsama:"Kapsama raporu",
+                   sahne:"Sahne listesi", topluluk:"Topluluk kareleri",
+                   dikey:"Dikey kare kapsaması"};
 const RAPOR_DOSYA = {karne:"tarama-karnesi", bolum:"bolum-ozeti",
                      capraz:"kisi-bolum-tablosu", supheli:"supheli-kareler",
-                     ikili:"birlikte-gorunenler"};
+                     ikili:"birlikte-gorunenler", kapsama:"kapsama-raporu",
+                     sahne:"sahne-listesi", topluluk:"topluluk-kareleri",
+                     dikey:"dikey-kapsama"};
 
 async function raporKaydet(tur){
   const d = await al("/api/durum");
@@ -1510,6 +1656,8 @@ async function kisileriYukle(){
         <button onclick="kisiBol(${k.kume})" title="Bu grupta iki ayrı kişi varsa ayır">Böl</button>
         <button onclick="seritAcKapa(${k.kume}, this)"
                 title="Bu kişinin fotoğraflarını göster">Kareler</button>
+        <button onclick="nedenGoster(${k.resimler.length ? k.resimler[0].id : 0})"
+                title="Bu yüz neden bu kişiye kondu?">Neden?</button>
         ${k.supheli ? `<button onclick="supheliGoster(${k.kume})"
            title="Kümeye tam oturmayan kareler">⚠ ${k.supheli} şüpheli</button>` : ""}
       </div>
@@ -1623,6 +1771,85 @@ async function canliGuncelle(calisiyor, sonKare){
     }
   }catch(e){ /* tarama surerken kisa kesintiler onemsiz */ }
   finally{ canliMesgul = false; }
+}
+
+/* Neden bu kisi? Kararin gerekcesini gosterir: kisinin merkezine benzerlik,
+   ayni kisiden en yakin ornekler ve BASKA kisiden en yakin ornek. Aradaki
+   fark buyukse karar guvenli demektir. */
+async function nedenGoster(yuzId){
+  if (!yuzId) return bildir("Bu kartta gösterilecek yüz yok.", "uyari");
+  const d = await al("/api/neden?yuz=" + yuzId);
+  if (!d || !d.yuz) return bildir("Bilgi alınamadı.", "hata");
+  const kutu = document.createElement("div");
+
+  const ust = document.createElement("div");
+  ust.className = "neden-satir";
+  if (d.resim){
+    const im = document.createElement("img");
+    im.src = d.resim; im.style.width = "84px"; im.style.height = "84px";
+    ust.appendChild(im);
+  }
+  const bilgi = document.createElement("div");
+  bilgi.style.fontSize = "13px";
+  bilgi.innerHTML = "<b>" + d.dosya + "</b><br>" +
+    "kişi: <b>" + d.kisi + "</b><br>" +
+    "bu kişiye benzerlik: <b>" + d.merkeze + "</b>" +
+    (d.supheli ? ' <span class="rozetcik eksik">şüpheli</span>' : "") +
+    "<br>netlik: " + d.netlik;
+  ust.appendChild(bilgi);
+  kutu.appendChild(ust);
+
+  function grup(baslik, liste, aciklama){
+    const b = document.createElement("div");
+    b.style.cssText = "margin-top:14px;font-size:12.5px;color:var(--soluk)";
+    b.innerHTML = "<b style='color:var(--yazi)'>" + baslik + "</b> — " + aciklama;
+    kutu.appendChild(b);
+    const sar = document.createElement("div");
+    sar.className = "neden-satir";
+    liste.forEach(function(x){
+      const h = document.createElement("div");
+      h.className = "neden-kutu";
+      if (x.resim){ const i = document.createElement("img"); i.src = x.resim; h.appendChild(i); }
+      const y = document.createElement("div");
+      y.textContent = x.benzerlik + (x.kisi ? "\n" + x.kisi : "");
+      y.style.whiteSpace = "pre-line";
+      h.appendChild(y);
+      sar.appendChild(h);
+    });
+    kutu.appendChild(sar);
+  }
+  grup("Aynı kişiden en yakınlar", d.ayni || [], "bunlara ne kadar benziyorsa o kadar emin");
+  grup("Başka kişilerden en yakın", d.baska || [], "bu sayı yukarıdakinden belirgin küçük olmalı");
+
+  const son = document.createElement("div");
+  son.style.cssText = "margin-top:14px;font-size:12.5px;color:var(--soluk);line-height:1.55";
+  const ayniEn = (d.ayni && d.ayni[0]) ? d.ayni[0].benzerlik : 0;
+  const baskaEn = (d.baska && d.baska[0]) ? d.baska[0].benzerlik : 0;
+  son.textContent = (ayniEn - baskaEn >= 0.20)
+    ? "Aradaki fark açık (" + ayniEn + " / " + baskaEn + ") — karar güvenli görünüyor."
+    : "Aradaki fark az (" + ayniEn + " / " + baskaEn + ") — bu yüzü gözden geçir.";
+  kutu.appendChild(son);
+
+  // ileti() govdeyi HTML metni olarak aliyor; DOM'u serilestirmek kacis
+  // hatalarina karsi elle metin birlestirmekten guvenli.
+  ileti({baslik: "Neden bu kişi?", genis: true, tur: "",
+         govde: kutu.innerHTML, dugmeler: [{yazi:"Tamam", ana:true, deger:true}]});
+}
+
+async function geriAl(){
+  const d = await al("/api/geri-al-liste");
+  const liste = d.islemler || [];
+  if (!liste.length) return bildir("Geri alınacak işlem yok.", "uyari");
+  const son = liste[0];
+  if (!await onay("Son işlemi geri al",
+      "<b>" + son.aciklama + "</b><br>" + son.zaman + "<br><br>" +
+      son.yuz + " yüz eski grubuna dönecek, isim listesi de o andaki haline gelecek." +
+      "<br><br>Fotoğraflara dokunulmaz.", "Geri al")) return;
+  const c = await post("/api/duzelt", {islem:"geri-al"});
+  if (c.hata) return uyar(c.hata);
+  bildir(c.mesaj || "Geri alındı.", "basarili", 3000);
+  kisileriYukle();
+  durumGuncelle();
 }
 
 /* G1 — kisinin karelerinden serit. Istege bagli yuklenir, liste yavaslamasin. */

@@ -14,3 +14,4 @@ __pycache__/
 # API anahtari - asla yayinlanmaz
 google_anahtar.txt
 aws_anahtar.json
+arama-sonucu.txt

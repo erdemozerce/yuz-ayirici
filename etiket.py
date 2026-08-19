@@ -424,6 +424,30 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
         return {"dosya": 0}
 
     con = sqlite3.connect(str(db_yolu))
+
+    # --- her kare icin bolum ve sahne bilgisi (otomatik altyazi icin)
+    kare_bilgi = {}
+    try:
+        import face_sorter as _motor
+        kare_sahne, _ozet = _motor.sahne_bloklari(con)
+        koklar = {r[0]: r[1] for r in con.execute(
+            "SELECT path, kok FROM files WHERE kok IS NOT NULL")}
+        for _yol in set(list(kare_sahne) + list(koklar)):
+            bilgi = {}
+            no = kare_sahne.get(_yol)
+            if no:
+                bilgi["sahne"] = str(no)
+            kok = koklar.get(_yol)
+            if kok:
+                bagil = _motor.bagil_klasor(_yol, kok, 1)
+                ad_ = str(bagil)
+                bilgi["bolum"] = (os.path.basename(os.path.normpath(kok))
+                                  if ad_ in (".", "") else ad_)
+            if bilgi:
+                kare_bilgi[_yol] = bilgi
+    except Exception:
+        kare_bilgi = {}
+
     esler_tablo = {}
     try:
         for r in con.execute("SELECT path, esler FROM files WHERE esler IS NOT NULL"):
@@ -478,7 +502,13 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
             for ad, _ in kisiler:
                 if ad not in adlar:
                     adlar.append(ad)
-            k_xmp, iptc = kunye_sozlugu(kunye, adlar, yol)
+            kare_kunye = kunye
+            if kare_bilgi.get(yol):
+                # bolum/sahne bu kareye ozel - sablondaki yer tutucular
+                # her fotografta dogru degeri alsin
+                kare_kunye = dict(kunye)
+                kare_kunye.update(kare_bilgi[yol])
+            k_xmp, iptc = kunye_sozlugu(kare_kunye, adlar, yol)
             veri.update(k_xmp)
         nasil, hata = dosyaya_yaz(pyexiv2, yol, veri, mod=mod,
                                   dogrula=(i <= dogrula_adet), iptc=iptc)
