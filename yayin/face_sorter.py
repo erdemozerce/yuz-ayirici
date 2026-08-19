@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.20.2"
+__version__ = "1.20.3"
 
 import argparse
 import base64

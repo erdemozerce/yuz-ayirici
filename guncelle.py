@@ -167,6 +167,11 @@ def gunluk_kontrol(log=print):
 
 
 def main():
+    import sys as _sys
+    bayraklar = {a.lower() for a in _sys.argv[1:]}
+    yalniz_kontrol = "--kontrol" in bayraklar
+    sormadan = bool({"--evet", "-y", "--yes"} & bayraklar)
+
     print("Yuz Ayirici guncelleme kontrolu...")
     print("Yerel surum:", yerel_surum())
     cfg = ayarlari_oku()
@@ -187,7 +192,22 @@ def main():
     print(f"Yeni surum bulundu: {m.get('surum')}")
     if m.get("notlar"):
         print("Notlar:", m["notlar"])
-    if input("Guncellensin mi? (E/h): ").strip().lower() in ("", "e", "evet", "y", "yes"):
+    if yalniz_kontrol:
+        print("(yalnizca kontrol edildi - guncellemek icin bayraksiz calistirin)")
+        return
+    if sormadan:
+        uygula(m)
+        return
+    try:
+        cevap = input("Guncellensin mi? (E/h): ").strip().lower()
+    except EOFError:
+        # Konsolsuz calistirildi (ornegin kisayoldan). Cokmek yerine anlat.
+        print()
+        print("Bu pencerede soru sorulamiyor.")
+        print("Guncellemek icin: python guncelle.py --evet")
+        print("Ya da programi acip sag ustteki 'Guncelleme var mi?' dugmesine basin.")
+        return
+    if cevap in ("", "e", "evet", "y", "yes"):
         uygula(m)
     else:
         print("Guncelleme atlandi.")

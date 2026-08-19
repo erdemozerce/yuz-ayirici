@@ -316,6 +316,32 @@ def xmp_sozlugu(kisiler, genislik, yukseklik):
     return veri
 
 
+BOLGE_ONEKLERI = ("Xmp.mwg-rs.Regions", "Xmp.acdsee-rs.Regions")
+
+
+def _eski_bolgeleri_sil(im, veri):
+    """
+    Yeni yuz bolgeleri yazilmadan once eskilerini siler.
+
+    Neden: exiv2, mevcut olandan AZ ogeli bir dizi yazilmaya calisilinca
+    "Indexing applied to non-array" ile cokuyor (olculdu: 3 bolgeli dosyaya
+    1-2 bolge yazmak hata, 3+ sorunsuz). Ayrica silinmezse gruptan cikarilan
+    bir kisinin ismi fotografta asili kalirdi.
+    """
+    if not any(k.startswith(BOLGE_ONEKLERI) for k in veri):
+        return
+    try:
+        mevcut = im.read_xmp()
+    except Exception:
+        return
+    silinecek = {k: None for k in mevcut if k.startswith(BOLGE_ONEKLERI)}
+    if silinecek:
+        try:
+            im.modify_xmp(silinecek)
+        except Exception:
+            pass
+
+
 def _kelimeleri_birlestir(im, veri):
     """
     Fotografta zaten yazili anahtar kelimeler varsa (bolum adi, telif, konu...)
@@ -339,7 +365,23 @@ def _kelimeleri_birlestir(im, veri):
 
 
 def yan_dosya_yolu(yol):
+    """
+    Yan (sidecar) dosyanin yolu: DSCF0020.RAF -> DSCF0020.xmp
+
+    ACDSee ve Adobe bu bicimi bekliyor (uzanti DEGISTIRILIR). Onceki
+    surumler "DSCF0020.RAF.xmp" yaziyordu; onu ACDSee gormuyordu.
+    """
+    return Path(yol).with_suffix(".xmp")
+
+
+def yan_dosya_eski(yol):
+    """Onceki surumlerin kullandigi ad - varsa o da guncellenir."""
     return Path(str(yol) + ".xmp")
+
+
+def yan_dosyalar(yol):
+    """Okurken bakilacak adlar: once yeni bicim, sonra eskisi."""
+    return [yan_dosya_yolu(yol), yan_dosya_eski(yol)]
 
 
 def piksel_ozeti(yol):
@@ -365,21 +407,30 @@ def dosyaya_yaz(pyexiv2, yol, veri, mod="gomulu", dogrula=False, iptc=None):
     yan_mi = yan_zorunlu or mod == "yan"
 
     if yan_mi:
-        hedef = yan_dosya_yolu(yol)
-        try:
-            if not hedef.exists():
-                hedef.write_text(BOS_XMP, encoding="utf-8")
-            with acilabilir(hedef) as acik:
-                with pyexiv2.Image(acik) as im:
-                    im.modify_xmp(_kelimeleri_birlestir(im, veri))
-            return "yan", None
-        except Exception as e:
-            return "yan", str(e)
+        # Oncelikli ad ACDSee/Adobe bicimi (DSCF0020.xmp). Onceki surumlerin
+        # yazdigi DSCF0020.RAF.xmp varsa bayat kalmasin diye o da guncellenir.
+        hedefler = [yan_dosya_yolu(yol)]
+        eski = yan_dosya_eski(yol)
+        if eski.exists() and eski != hedefler[0]:
+            hedefler.append(eski)
+        son_hata = None
+        for hedef in hedefler:
+            try:
+                if not hedef.exists():
+                    hedef.write_text(BOS_XMP, encoding="utf-8")
+                with acilabilir(hedef) as acik:
+                    with pyexiv2.Image(acik) as im:
+                        _eski_bolgeleri_sil(im, veri)
+                        im.modify_xmp(_kelimeleri_birlestir(im, veri))
+            except Exception as e:
+                son_hata = str(e)
+        return "yan", son_hata
 
     onceki = piksel_ozeti(yol) if dogrula else None
     try:
         with acilabilir(yol) as acik:
             with pyexiv2.Image(acik) as im:
+                _eski_bolgeleri_sil(im, veri)
                 im.modify_xmp(_kelimeleri_birlestir(im, veri))
                 if iptc:
                     try:
@@ -439,10 +490,15 @@ def etiketle(db_yolu, isimler_csv, mod="gomulu", limit=0, dogrula_adet=5,
                 bilgi["sahne"] = str(no)
             kok = koklar.get(_yol)
             if kok:
-                bagil = _motor.bagil_klasor(_yol, kok, 1)
-                ad_ = str(bagil)
-                bilgi["bolum"] = (os.path.basename(os.path.normpath(kok))
-                                  if ad_ in (".", "") else ad_)
+                # "9. Bolum/raw-jpeg" gibi kapsayici klasorlerde bolum adi
+                # kaynak klasorun kendi adidir (rapordaki kuralla ayni).
+                KAPSAYICI = {"raw", "jpeg", "jpg", "rawjpeg", "rawjpg", "dcim",
+                             "export", "cikti", "foto", "fotograf", "fotograflar",
+                             "images", "img", "photos", "orijinal", "original"}
+                kok_adi = os.path.basename(os.path.normpath(kok))
+                ad_ = str(_motor.bagil_klasor(_yol, kok, 1))
+                sade = ad_.lower().replace(" ", "").replace("_", "").replace("-", "")
+                bilgi["bolum"] = kok_adi if (ad_ in (".", "") or sade in KAPSAYICI) else ad_
             if bilgi:
                 kare_bilgi[_yol] = bilgi
     except Exception:
@@ -544,7 +600,9 @@ def oku(yol):
     pyexiv2 = hazirla()
     kaynak = yol
     if Path(yol).suffix.lower() in YAN_DOSYA_GEREKTIREN:
-        kaynak = yan_dosya_yolu(yol)
+        # yeni bicim (DSCF.xmp) yoksa eski bicime (DSCF.RAF.xmp) bak
+        kaynak = next((y for y in yan_dosyalar(yol) if y.exists()),
+                      yan_dosya_yolu(yol))
     with acilabilir(kaynak) as acik:
         with pyexiv2.Image(acik) as im:
             x = im.read_xmp()

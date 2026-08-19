@@ -77,8 +77,10 @@ def metadata_tasi(kaynak, hedef):
         pyexiv2 = etiket.hazirla()
         okunacak = kaynak
         if Path(kaynak).suffix.lower() in etiket.YAN_DOSYA_GEREKTIREN:
-            okunacak = etiket.yan_dosya_yolu(kaynak)
-            if not Path(okunacak).exists():
+            # yeni bicim (DSCF.xmp) yoksa eski bicime (DSCF.RAF.xmp) bak
+            okunacak = next((y for y in etiket.yan_dosyalar(kaynak) if Path(y).exists()),
+                            None)
+            if okunacak is None:
                 return False
         with etiket.acilabilir(okunacak) as acik:
             with pyexiv2.Image(acik) as im:

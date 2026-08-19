@@ -1,6 +1,6 @@
 {
-  "surum": "1.20.2",
-  "notlar": "Klasorleme cokme hatasi duzeltildi + kapsama/sahne raporlari, gorunum destegi, geri alma",
+  "surum": "1.20.3",
+  "notlar": "Metadata yazma cokme hatasi (az bolge), ACDSee yan dosya adi, bolum adlandirmasi",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,12 +10,12 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "731fa921968049adbef46553cc18eb05faec282c76d65672e05d2921ee20923a"
+      "sha256": "67c6b212ad10c3c0344d4748e6403c9492fd8afa1db6721d4dfc326d3f57db45"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "45bce4c59ca8f7920daeb7dc0b078c0ca0b24ecad1fbedc96a515ca39e9ddd50"
+      "sha256": "7b6dfaae375ed2529573cc5febe85785c87ec9861b350341886725fe61b63c57"
     },
     {
       "ad": "pencere.py",
@@ -35,12 +35,12 @@
     {
       "ad": "etiket.py",
       "url": "etiket.py",
-      "sha256": "f6870b2fd34b5942e46f5b2d23a913930b87e03b21570d4927a16fd826564827"
+      "sha256": "98c722841ceacb7844848aac3e20cbfcf9a7df971c778ece001b5d8401468df4"
     },
     {
       "ad": "teslim.py",
       "url": "teslim.py",
-      "sha256": "f676b90755b70dd7a5e817a13f06154329d6562417a97069745c2807a9456778"
+      "sha256": "1dea2d0af217ce68445b22466ab72d8f93642edbb01ce7bb7ccf9aca0824fafe"
     },
     {
       "ad": "baslat.py",
@@ -50,7 +50,7 @@
     {
       "ad": "guncelle.py",
       "url": "guncelle.py",
-      "sha256": "91ac69ce80ce99a4d805c6100f337907dfadfcef0cdd97b59b24d97b15844ca5"
+      "sha256": "d8f71a7f2feb59b267867d10c527f5946a7a01b1ecb42b171616322177643023"
     },
     {
       "ad": "kurulum_testi.py",

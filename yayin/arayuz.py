@@ -731,12 +731,25 @@ def rapor_verisi():
 
         # --- BOLUM: kaynak klasore gore ilk alt klasor. Kardesin arsivi
         # "... / 9. Bolum / raw-jpeg" seklinde; bolum adi budur.
+        # Kapsayici klasor adlari: bunlar bolum adi olamaz, arsivde her
+        # bolumun altinda ayni isimle bulunurlar.
+        KAPSAYICI = {"raw", "jpeg", "jpg", "rawjpeg", "raw-jpeg", "rawjpg",
+                     "dcim", "export", "cikti", "foto", "fotograf", "fotograflar",
+                     "images", "img", "photos", "orijinal", "original", "temp"}
+
         def bolum_adi(yol, kok):
             if not kok:
                 return os.path.basename(os.path.dirname(yol)) or "(kok)"
+            kok_adi = os.path.basename(os.path.normpath(kok)) or "(kok)"
             bagil = motor.bagil_klasor(yol, kok, 1)
             ad = str(bagil)
-            return os.path.basename(os.path.normpath(kok)) if ad in (".", "") else ad
+            if ad in (".", ""):
+                return kok_adi
+            sade = ad.lower().replace(" ", "").replace("_", "").replace("-", "")
+            if sade in KAPSAYICI:
+                # "9. Bolum/raw-jpeg" -> bolum adi "9. Bolum" olmali
+                return kok_adi
+            return ad
 
         kare_bolum, bolum_kare, bolum_yuzsuz = {}, {}, {}
         for yolu, kok, nf in con.execute("SELECT path, kok, n_faces FROM files"):
