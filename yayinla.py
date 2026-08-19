@@ -59,6 +59,116 @@ def surum_yaz(yeni):
         fs.write_text(s2, encoding="utf-8", newline="\n")
 
 
+def _kapanmamis_dize(js):
+    """
+    JS blogunda satir ortasinda kesilmis bir dize var mi?
+
+    Bu hata uc kez cikti: kaynak metin bir kabuk/heredoc uzerinden gecerken
+    ters bolu yeniyor ve "\\n" gercek satir sonuna donuyor. Sonuc: butun
+    script blogu ayrisamiyor, arayuzun her dugmesi oluyor ama dosyaya
+    bakinca hicbir sey yanlis gorunmuyor.
+
+    Tarayici olmadan yakalamak icin kucuk bir sozcuk cozumleyici. Onemli
+    ayrinti: kisi kartlari ic ice sablon dizesi kullaniyor
+    (`... ${ liste.map(x => `...`) } ...`), bu yuzden baglam bir YIGIN
+    ile izleniyor - yoksa icteki ters tirnak distakini kapatiyor sanilir.
+
+    JS'te ' ve " dizeleri satir sonunu gecemez; satir biterken hala
+    dizenin icindeysek hata kesindir.
+    """
+    NL = chr(10)
+    ONCE_KAR = set("(,=:[!&|?{};+-*%~^<>")
+    ONCE_SOZ = {"return", "typeof", "case", "in", "of", "do", "else"}
+    yigin = [{"tur": "kod", "suslu": 0}]
+    n, i, satir = len(js), 0, 1
+    onceki = ""
+
+    while i < n:
+        c = js[i]
+        ust = yigin[-1]
+
+        if c == NL:
+            satir += 1
+            i += 1
+            continue
+
+        if ust["tur"] == "kod":
+            if c == chr(92):
+                i += 2
+                continue
+            if c == "/" and i + 1 < n and js[i + 1] == "/":
+                while i < n and js[i] != NL:
+                    i += 1
+                continue
+            if c == "/" and i + 1 < n and js[i + 1] == "*":
+                i += 2
+                while i + 1 < n and not (js[i] == "*" and js[i + 1] == "/"):
+                    if js[i] == NL:
+                        satir += 1
+                    i += 1
+                i += 2
+                continue
+            if c == "/":
+                sozcuk = re.search(r"([A-Za-z_$]+)\s*$", js[max(0, i - 12):i])
+                regex_mi = (not onceki) or (onceki in ONCE_KAR) or \
+                           (sozcuk is not None and sozcuk.group(1) in ONCE_SOZ)
+                i += 1
+                if regex_mi:                      # duzenli ifadeyi atla
+                    while i < n and js[i] not in (chr(47), NL):
+                        if js[i] == chr(92):
+                            i += 1
+                        i += 1
+                    i += 1
+                onceki = c
+                continue
+            if c in ("'", chr(34)):               # tek/cift tirnakli dize
+                tirnak, bas = c, satir
+                i += 1
+                while i < n and js[i] != tirnak:
+                    if js[i] == chr(92):
+                        i += 2
+                        continue
+                    if js[i] == NL:               # dize satir sonunu gecti
+                        return bas, js.split(NL)[bas - 1].strip()[:90]
+                    i += 1
+                i += 1
+                onceki = tirnak
+                continue
+            if c == "`":
+                yigin.append({"tur": "sablon"})
+                i += 1
+                continue
+            if c == "{":
+                ust["suslu"] += 1
+            elif c == "}":
+                if ust["suslu"] > 0:
+                    ust["suslu"] -= 1
+                elif len(yigin) > 1:
+                    yigin.pop()               # ${ ... } bitti, sablona don
+            if not c.isspace():
+                onceki = c
+            i += 1
+            continue
+
+        # sablon dizesi icindeyiz
+        if c == chr(92):
+            i += 2
+            continue
+        if c == "`":
+            yigin.pop()
+            onceki = "`"
+            i += 1
+            continue
+        if c == "$" and i + 1 < n and js[i + 1] == "{":
+            yigin.append({"tur": "kod", "suslu": 0})
+            onceki = ""
+            i += 2
+            continue
+        i += 1
+
+    return None
+
+
 def js_kontrol(yol):
     """
     arayuz.html icindeki <script> blogunda kaba sozdizimi kontrolu.
@@ -82,6 +192,12 @@ def js_kontrol(yol):
             if re.search(r"'[^'\n]*onclick=\"[^\"]*\('", s):
                 hatalar.append("satir %d: onclick icinde kacissiz tirnak -> %s"
                                % (i, s[:70]))
+    # Kapanmamis dize: "\\n" gercek satir sonuna donerse butun blok olur.
+    kesik = _kapanmamis_dize(betik)
+    if kesik:
+        hatalar.append("satir %d: dize satir ortasinda kesilmis (muhtemelen "
+                       "kacis karakteri yenmis) -> %s" % kesik)
+
     # kaba denge kontrolu
     if betik.count("{") != betik.count("}"):
         hatalar.append("suslu parantez dengesiz: %d ac / %d kapa"

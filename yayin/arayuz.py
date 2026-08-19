@@ -49,6 +49,7 @@ durum = {
     "satirlar": [],
     "bitti": "",
     "hata": "",
+    "son_kare": "",
 }
 kilit = threading.Lock()
 dialog_kuyrugu = queue.Queue()
@@ -109,6 +110,7 @@ def ayar_oku():
         "eps": 0.50, "min_samples": 3, "mod": "auto",
         "duzen": "altklasor-kisi", "derinlik": 0, "etiket_mod": "gomulu",
         "secki_atla": False, "hizli_tarama": False, "kaliteli_tarama": False,
+    "tema": "sistem",
         "guncelleme_url": "", "otomatik_guncelleme": True, "son_kontrol": 0,
     }
     if AYARLAR.exists():
@@ -136,7 +138,7 @@ def is_calistir(adim, argv):
         if durum["calisiyor"]:
             return False
         durum.update(calisiyor=True, adim=adim, yapilan=0, toplam=0, hiz=0.0,
-                     kalan="", satirlar=[], bitti="", hata="")
+                     kalan="", satirlar=[], bitti="", hata="", son_kare="")
 
     def calis():
         try:
@@ -150,6 +152,10 @@ def is_calistir(adim, argv):
             for satir in p.stdout:
                 satir = satir.rstrip()
                 if not satir or satir.startswith(("Applied providers", "find model", "set det-size")):
+                    continue
+                if satir.startswith("::kare:: "):
+                    with kilit:
+                        durum["son_kare"] = satir[9:].strip()
                     continue
                 m = ILERLEME.search(satir)
                 with kilit:
@@ -264,6 +270,57 @@ def kucuk_resim(kayit, boy=132):
     return sonuc
 
 
+_KARE_BELLEK = {}       # dosya yolu -> base64 kucuk kare
+
+
+def kare_onizleme(yol, boy=300):
+    """Bir fotografin tamamini kucuk JPEG olarak dondurur (serit/canli onizleme)."""
+    onbellek = _KARE_BELLEK.get(yol)
+    if onbellek is not None:
+        return onbellek
+    try:
+        img, _ = motor.imread_unicode(yol, kucult=boy)
+    except Exception:
+        return None
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    o = boy / max(h, w, 1)
+    if o < 1:
+        img = cv2.resize(img, (max(int(w * o), 1), max(int(h * o), 1)),
+                         interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 78])
+    if not ok:
+        return None
+    sonuc = "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+    if len(_KARE_BELLEK) < 600:
+        _KARE_BELLEK[yol] = sonuc
+    return sonuc
+
+
+def kisi_kareleri(cid, adet=12):
+    """Bir kisinin karelerinden serit icin kucuk onizlemeler."""
+    yol = Path(db_yolu())
+    if not yol.exists():
+        return []
+    con = sqlite3.connect(str(yol))
+    con.executescript(motor.DB_SCHEMA)
+    try:
+        satirlar = [r[0] for r in con.execute(
+            "SELECT path FROM faces WHERE cluster=? GROUP BY path "
+            "ORDER BY MAX(COALESCE(netlik,0)) DESC LIMIT ?", (cid, adet))]
+    except Exception:
+        satirlar = []
+    con.close()
+    cikti = []
+    for yolu in satirlar:
+        r = kare_onizleme(yolu)
+        if r:
+            cikti.append({"ad": os.path.basename(yolu), "klasor": os.path.dirname(yolu),
+                          "resim": r})
+    return cikti
+
+
 def kutuphane_listesi():
     """Kutuphanedeki kisiler + kapak resimleri (base64)."""
     kut = BASE / "kisi_kutuphanesi.db"
@@ -315,7 +372,7 @@ def rapor_verisi():
                 for j in range(i + 1, len(k)):
                     beraber[(k[i], k[j])] = beraber.get((k[i], k[j]), 0) + 1
         ikili = [{"a": ad(x), "b": ad(y), "adet": n}
-                 for (x, y), n in sorted(beraber.items(), key=lambda z: -z[1])[:12]]
+                 for (x, y), n in sorted(beraber.items(), key=lambda z: -z[1])[:30]]
 
         klasorler = {}
         for (p,) in con.execute("SELECT path FROM files WHERE n_faces > 0"):
@@ -323,6 +380,87 @@ def rapor_verisi():
             klasorler[k] = klasorler.get(k, 0) + 1
         dagilim = [{"klasor": k, "adet": n}
                    for k, n in sorted(klasorler.items(), key=lambda z: -z[1])[:12]]
+
+        # --- BOLUM: kaynak klasore gore ilk alt klasor. Kardesin arsivi
+        # "... / 9. Bolum / raw-jpeg" seklinde; bolum adi budur.
+        def bolum_adi(yol, kok):
+            if not kok:
+                return os.path.basename(os.path.dirname(yol)) or "(kok)"
+            bagil = motor.bagil_klasor(yol, kok, 1)
+            ad = str(bagil)
+            return os.path.basename(os.path.normpath(kok)) if ad in (".", "") else ad
+
+        kare_bolum, bolum_kare, bolum_yuzsuz = {}, {}, {}
+        for yolu, kok, nf in con.execute("SELECT path, kok, n_faces FROM files"):
+            b = bolum_adi(yolu, kok)
+            kare_bolum[yolu] = b
+            bolum_kare[b] = bolum_kare.get(b, 0) + 1
+            if not nf:
+                bolum_yuzsuz[b] = bolum_yuzsuz.get(b, 0) + 1
+
+        # kisi x bolum caprazi
+        capraz, bolum_kisi = {}, {}
+        for cid, yolu in con.execute(
+                "SELECT cluster, path FROM faces WHERE cluster > 0 GROUP BY cluster, path"):
+            b = kare_bolum.get(yolu) or "(bilinmiyor)"
+            capraz[(cid, b)] = capraz.get((cid, b), 0) + 1
+            bolum_kisi.setdefault(b, set()).add(cid)
+
+        bolum_sira = sorted(bolum_kare, key=lambda b: -bolum_kare[b])
+        bolumler = []
+        for b in bolum_sira:
+            enler = sorted(((c, n) for (c, bb), n in capraz.items() if bb == b),
+                           key=lambda z: -z[1])[:3]
+            bolumler.append({
+                "bolum": b, "kare": bolum_kare[b],
+                "kisi": len(bolum_kisi.get(b, ())),
+                "yuzsuz": bolum_yuzsuz.get(b, 0),
+                "enler": [{"ad": ad(c), "adet": n} for c, n in enler],
+            })
+
+        capraz_tablo = {
+            "bolumler": bolum_sira[:12],
+            "satirlar": [{"ad": ad(k["kume"]),
+                          "hucreler": [capraz.get((k["kume"], b), 0)
+                                       for b in bolum_sira[:12]],
+                          "toplam": k["fotograf"]}
+                         for k in kisiler[:40]],
+        }
+
+        # --- TARAMA KARNESI
+        try:
+            toplam_kare = con.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            yuzsuz = con.execute("SELECT COUNT(*) FROM files WHERE n_faces=0").fetchone()[0]
+            toplam_yuz = con.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
+            gruplanmayan = con.execute(
+                "SELECT COUNT(*) FROM faces WHERE cluster <= 0").fetchone()[0]
+            n_supheli = con.execute(
+                "SELECT COUNT(*) FROM faces WHERE supheli IS NOT NULL").fetchone()[0]
+        except Exception:
+            toplam_kare = yuzsuz = toplam_yuz = gruplanmayan = n_supheli = 0
+        karne = {
+            "kare": toplam_kare, "yuzsuz": yuzsuz, "yuz": toplam_yuz,
+            "gruplanmayan": gruplanmayan, "supheli": n_supheli,
+            "kisi": len(kisiler),
+            "yuzsuz_oran": round(100.0 * yuzsuz / toplam_kare, 1) if toplam_kare else 0.0,
+            # yuz bulunamayan orani yuksek klasorler: yeniden taranmasi gerekebilir
+            "zayif": sorted(
+                ({"bolum": b, "kare": bolum_kare[b], "yuzsuz": bolum_yuzsuz.get(b, 0),
+                  "oran": round(100.0 * bolum_yuzsuz.get(b, 0) / bolum_kare[b], 1)}
+                 for b in bolum_sira if bolum_kare[b] >= 5),
+                key=lambda z: -z["oran"])[:8],
+        }
+
+        # --- SUPHELI KARELER
+        try:
+            supheli_liste = [
+                {"ad": os.path.basename(pp), "klasor": os.path.dirname(pp),
+                 "kisi": ad(cc), "benzerlik": round(float(bb or 0), 3)}
+                for pp, cc, bb in con.execute(
+                    "SELECT path, cluster, supheli FROM faces "
+                    "WHERE supheli IS NOT NULL ORDER BY supheli LIMIT 400")]
+        except Exception:
+            supheli_liste = []
 
         try:
             isaretli = con.execute(
@@ -336,7 +474,9 @@ def rapor_verisi():
             vetolu = 0
         con.close()
         return {"kisiler": kisiler, "ikili": ikili, "dagilim": dagilim,
-                "isaretli": isaretli, "vetolu": vetolu}
+                "isaretli": isaretli, "vetolu": vetolu,
+                "bolumler": bolumler, "capraz": capraz_tablo,
+                "karne": karne, "supheli": supheli_liste}
     except Exception:
         return {}
 
@@ -419,12 +559,18 @@ def kisiler_listesi(adet=5):
         "GROUP BY cluster ORDER BY COUNT(*) DESC"
     ):
         ornekler = motor.kume_ornekleri(con, cid, adet)
+        # En net yuz: kutuphaneye ogretirken kapak olarak bu kare secilir.
+        netlikler = [(k[7] or 0.0) for k in ornekler]
+        en_net_id = None
+        if netlikler and max(netlikler) > 0:
+            en_net_id = ornekler[netlikler.index(max(netlikler))][0]
         resimler = []
         for k in ornekler:
             r = kucuk_resim(k)
             if r:
                 resimler.append({"id": k[0], "resim": r,
-                                 "supheli": k[6] is not None})
+                                 "supheli": k[6] is not None,
+                                 "ennet": k[0] == en_net_id})
         n_supheli = con.execute(
             "SELECT COUNT(DISTINCT path) FROM faces WHERE cluster=? AND supheli IS NOT NULL",
             (cid,)).fetchone()[0]
@@ -522,6 +668,20 @@ class Vekil(BaseHTTPRequestHandler):
             return self._json(d)
         if u.path == "/api/kisiler":
             return self._json({"kisiler": kisiler_listesi()})
+        if u.path == "/api/son-kare":
+            with kilit:
+                yolu = durum.get("son_kare") or ""
+            if not yolu or not os.path.exists(yolu):
+                return self._json({"resim": "", "ad": ""})
+            return self._json({"resim": kare_onizleme(yolu) or "",
+                               "ad": os.path.basename(yolu)})
+
+        if u.path == "/api/kisi-kareler":
+            kume = q.get("kume", [""])[0]
+            if not kume:
+                return self._json({"kareler": []})
+            return self._json({"kareler": kisi_kareleri(int(kume))})
+
         if u.path == "/api/supheli":
             kume = q.get("kume", [""])[0]
             yol = Path(db_yolu())
@@ -625,7 +785,7 @@ class Vekil(BaseHTTPRequestHandler):
 
         if u.path == "/api/ayar":
             for k in ("eps", "min_samples", "mod", "duzen", "derinlik", "etiket_mod",
-                      "secki_atla", "hizli_tarama", "kaliteli_tarama"):
+                      "secki_atla", "hizli_tarama", "kaliteli_tarama", "tema"):
                 if k in veri:
                     cfg[k] = veri[k]
             ayar_yaz(cfg)
@@ -718,6 +878,96 @@ class Vekil(BaseHTTPRequestHandler):
                     "--duzen", cfg["duzen"], "--derinlik", cfg["derinlik"],
                     "--dosya-listesi", str(liste), "--evet"])})
             return self._json({"hata": "bilinmeyen islem"}, 400)
+
+        if u.path == "/api/rapor-kaydet":
+            import csv as _csv
+            import io as _io
+            tur = (veri.get("tur") or "").lower()
+            bicim = (veri.get("bicim") or "csv").lower()
+            klasor = (veri.get("klasor") or "").strip() or str(BASE)
+            if not os.path.isdir(klasor):
+                return self._json({"hata": "Klasor bulunamadi: %s" % klasor}, 400)
+            d = rapor_verisi()
+            if not d:
+                return self._json({"hata": "Once tarama ve gruplama yapin"}, 400)
+
+            basliklar, satirlar, varsayilan = [], [], tur
+            if tur == "bolum":
+                basliklar = ["bolum", "kare", "kisi", "yuz_bulunamayan", "en_cok_gorunen"]
+                satirlar = [[b["bolum"], b["kare"], b["kisi"], b["yuzsuz"],
+                             ", ".join("%s (%d)" % (e["ad"], e["adet"]) for e in b["enler"])]
+                            for b in d.get("bolumler", [])]
+                varsayilan = "bolum-ozeti"
+            elif tur == "supheli":
+                basliklar = ["kisi", "dosya", "benzerlik", "klasor"]
+                satirlar = [[x["kisi"], x["ad"], x["benzerlik"], x["klasor"]]
+                            for x in d.get("supheli", [])]
+                varsayilan = "supheli-kareler"
+            elif tur == "capraz":
+                c = d.get("capraz", {})
+                basliklar = ["kisi"] + list(c.get("bolumler", [])) + ["toplam"]
+                satirlar = [[r["ad"]] + list(r["hucreler"]) + [r["toplam"]]
+                            for r in c.get("satirlar", [])]
+                varsayilan = "kisi-bolum-tablosu"
+            elif tur == "ikili":
+                basliklar = ["kisi", "kisi", "birlikte_kare"]
+                satirlar = [[i["a"], i["b"], i["adet"]] for i in d.get("ikili", [])]
+                varsayilan = "birlikte-gorunenler"
+            elif tur == "karne":
+                k = d.get("karne", {})
+                basliklar = ["olcum", "deger"]
+                satirlar = [
+                    ["taranan kare", k.get("kare", 0)],
+                    ["yuz bulunan kare", k.get("kare", 0) - k.get("yuzsuz", 0)],
+                    ["yuz bulunamayan kare", k.get("yuzsuz", 0)],
+                    ["yuz bulunamayan oran %", k.get("yuzsuz_oran", 0)],
+                    ["bulunan yuz", k.get("yuz", 0)],
+                    ["gruplanamayan yuz", k.get("gruplanmayan", 0)],
+                    ["supheli yuz", k.get("supheli", 0)],
+                    ["ayirt edilen kisi", k.get("kisi", 0)],
+                ] + [["zayif klasor: " + z["bolum"],
+                      "%d karenin %d'sinde yuz yok (%%%s)" % (z["kare"], z["yuzsuz"], z["oran"])]
+                     for z in k.get("zayif", [])]
+                varsayilan = "tarama-karnesi"
+            else:
+                return self._json({"hata": "bilinmeyen rapor turu"}, 400)
+
+            if not satirlar:
+                return self._json({"hata": "Bu raporda gosterilecek satir yok"}, 400)
+
+            uzanti = ".csv" if bicim.startswith("csv") else ".txt"
+            ad = (veri.get("ad") or "").strip() or (
+                varsayilan + "-" + time.strftime("%Y%m%d-%H%M"))
+            for kotu in '<>:"/\\|?*':
+                ad = ad.replace(kotu, "_")
+            if not ad.lower().endswith(uzanti):
+                ad += uzanti
+            hedef = Path(klasor) / ad
+
+            if bicim.startswith("csv"):
+                tampon = _io.StringIO()
+                w = _csv.writer(tampon, delimiter=";", lineterminator="\n")
+                w.writerow(basliklar)
+                for r in satirlar:
+                    w.writerow(r)
+                icerik = tampon.getvalue()
+            else:
+                genis = [max(len(str(basliklar[i])),
+                             max((len(str(r[i])) for r in satirlar), default=0))
+                         for i in range(len(basliklar))]
+                cizgi = "  ".join("-" * g for g in genis)
+                satir_yaz = lambda r: "  ".join(  # noqa: E731
+                    str(r[i]).ljust(genis[i]) for i in range(len(basliklar)))
+                icerik = "\n".join([satir_yaz(basliklar), cizgi]
+                                    + [satir_yaz(r) for r in satirlar]) + "\n"
+
+            try:
+                hedef.write_text(icerik,
+                                 encoding="utf-8-sig" if bicim.startswith("csv") else "utf-8")
+            except OSError as e:
+                return self._json({"hata": "Yazilamadi: %s" % e}, 400)
+            return self._json({"ok": True, "yol": str(hedef),
+                               "mesaj": "%d satir yazildi: %s" % (len(satirlar), hedef.name)})
 
         if u.path == "/api/kutuphane-islem":
             try:

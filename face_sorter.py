@@ -19,7 +19,7 @@ Notlar:
     tekrar tekrar calistirabilirsin. Yeniden tarama gerekmez.
 """
 
-__version__ = "1.20.0"
+__version__ = "1.20.1"
 
 import argparse
 import base64
@@ -518,6 +518,8 @@ def cmd_scan(args):
                 hiz = i / (time.time() - t0)
                 print(f"  [{i}/{len(todo)}] {hiz:.2f} foto/sn | {n_faces_total} yuz | "
                       f"tahmini kalan: {fmt_eta((len(todo) - i) / max(hiz, 1e-6))}", flush=True)
+                # Arayuz canli onizleme icin son isledigimiz kareyi okur.
+                print("::kare:: %s" % gorev[0], flush=True)
     else:
         import concurrent.futures as cf
         with cf.ProcessPoolExecutor(
@@ -640,7 +642,7 @@ def cmd_cluster(args):
 def kume_ornekleri(con, cid, adet):
     """Bir kumenin merkezine en yakin (en temsili) yuzlerini dondurur."""
     rows = con.execute(
-        "SELECT path,x1,y1,x2,y2,emb,id,supheli FROM faces WHERE cluster = ?", (cid,)
+        "SELECT path,x1,y1,x2,y2,emb,id,supheli,netlik FROM faces WHERE cluster = ?", (cid,)
     ).fetchall()
     if not rows:
         return []
@@ -660,7 +662,7 @@ def kume_ornekleri(con, cid, adet):
             break
         if int(i) not in sira:
             sira.append(int(i))
-    return [(rows[i][6],) + tuple(rows[i][:5]) + (rows[i][7],) for i in sira]
+    return [(rows[i][6],) + tuple(rows[i][:5]) + (rows[i][7], rows[i][8]) for i in sira]
 
 
 def kume_vektorleri(con, cid):

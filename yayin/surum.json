@@ -1,6 +1,6 @@
 {
-  "surum": "1.20.0",
-  "notlar": "Yuksek kalite taramasi secenegi, supheli kare isaretleme, hizli fotograf okuma",
+  "surum": "1.20.1",
+  "notlar": "Bozuk arayuz duzeltmesi + gorsel ve raporlama gelistirmeleri",
   "dosyalar": [
     {
       "ad": "kur.py",
@@ -10,12 +10,12 @@
     {
       "ad": "face_sorter.py",
       "url": "face_sorter.py",
-      "sha256": "9800f30e3107b3cffc2a0770e66298273838b1d1a33bb2d7dbf63ab506cce8e8"
+      "sha256": "9b56b44ce3f8d89dfa65aaefd8a7581cf6d898d0f797113dbce1a34354158267"
     },
     {
       "ad": "arayuz.py",
       "url": "arayuz.py",
-      "sha256": "5f139048efaf6c39728edf8905a07f98beea0bb27f0e052bb12f660404d020a2"
+      "sha256": "60de119c50de189a1ee0e7f75c0c61ebc643e3e5def0b08de84a0635080edd7a"
     },
     {
       "ad": "pencere.py",
@@ -25,7 +25,7 @@
     {
       "ad": "arayuz.html",
       "url": "arayuz.html",
-      "sha256": "94e01e239fab4b766a69b5cd74301e3ec9b1758412144cf9727fd57f8d723f46"
+      "sha256": "e20099e53626769288dcb7a0e524e4ccc5266e595e61fd8cb79d54d8fc589601"
     },
     {
       "ad": "kutuphane.py",
